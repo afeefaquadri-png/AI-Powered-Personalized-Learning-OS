@@ -22,7 +22,7 @@ async def get_chapter_activity(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Get the activity for a chapter."""
+    """Get the activity for a chapter, including latest score if already evaluated."""
     chapter_uuid = uuid.UUID(chapter_id)
 
     result = await db.execute(
@@ -32,10 +32,26 @@ async def get_chapter_activity(
     if not activity:
         raise HTTPException(status_code=404, detail="No activity found for this chapter")
 
+    # Include latest submission score when the activity has been evaluated
+    latest_score = None
+    if activity.status == "evaluated":
+        student_id = uuid.UUID(user["sub"])
+        score_result = await db.execute(
+            select(ActivitySubmission.score)
+            .where(
+                ActivitySubmission.activity_id == activity.id,
+                ActivitySubmission.student_id == student_id,
+            )
+            .order_by(desc(ActivitySubmission.submitted_at))
+            .limit(1)
+        )
+        latest_score = score_result.scalar_one_or_none()
+
     return {
         "activity_id": str(activity.id),
         "type": activity.type,
         "status": activity.status,
+        "latest_score": latest_score,
         "prompt": activity.prompt_json,
     }
 
@@ -108,7 +124,7 @@ async def evaluate_activity(
     submission.score = evaluation.get("score", 0)
     activity.status = "evaluated"
 
-    # Update student progress: unlock next chapter and update average score
+    # Update student progress: unlock next chapter and update average score + learning profile
     chapter = await db.get(Chapter, activity.chapter_id)
     if chapter:
         chapter.status = "completed"
@@ -134,7 +150,7 @@ async def evaluate_activity(
         progress = result.scalar_one_or_none()
         if progress:
             progress.chapters_completed += 1
-            # Recalculate average score
+            # Recalculate rolling average score
             if progress.average_score is None:
                 progress.average_score = float(submission.score or 0)
             else:
@@ -142,6 +158,18 @@ async def evaluate_activity(
                     progress.average_score * (progress.chapters_completed - 1)
                     + float(submission.score or 0)
                 ) / progress.chapters_completed
+
+            # Accumulate strengths and weaknesses (deduplicated, capped at 10 each)
+            new_strengths = evaluation.get("strengths", [])
+            new_weaknesses = evaluation.get("areas_for_improvement", [])
+            if new_strengths:
+                existing = progress.strengths or []
+                merged = list(dict.fromkeys(existing + new_strengths))[-10:]
+                progress.strengths = merged
+            if new_weaknesses:
+                existing = progress.weaknesses or []
+                merged = list(dict.fromkeys(existing + new_weaknesses))[-10:]
+                progress.weaknesses = merged
 
     await db.commit()
 

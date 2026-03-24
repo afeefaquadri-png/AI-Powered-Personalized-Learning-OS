@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.rate_limiter import limiter
 from app.dependencies import get_current_user
 from app.models.chapter import Chapter
 from app.models.progress import StudentProgress
@@ -17,7 +18,9 @@ router = APIRouter()
 
 
 @router.post("/generate", response_model=CurriculumResponse)
+@limiter.limit("10/minute")
 async def generate_curriculum_route(
+    request: Request,
     data: CurriculumGenerateRequest,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),

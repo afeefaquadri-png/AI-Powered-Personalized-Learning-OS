@@ -10,6 +10,7 @@ export default function VoiceChat({ chapterId }: VoiceChatProps) {
   const {
     isConnected,
     isListening,
+    isAISpeaking,
     transcript,
     connect,
     disconnect,
@@ -46,22 +47,44 @@ export default function VoiceChat({ chapterId }: VoiceChatProps) {
 
       {isConnected && (
         <>
-          {/* Mic button */}
-          <div className="flex flex-col items-center gap-4 mb-6">
+          {/* Mic button + AI speaking indicator */}
+          <div className="flex flex-col items-center gap-3 mb-6">
             <button
               onClick={toggleListening}
+              disabled={isAISpeaking}
               className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-lg transition-all ${
                 isListening
                   ? "bg-red-500 text-white scale-110 animate-pulse"
+                  : isAISpeaking
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                   : "bg-blue-600 text-white hover:bg-blue-700"
               }`}
-              title={isListening ? "Stop listening" : "Start listening"}
+              title={
+                isAISpeaking
+                  ? "AI is speaking…"
+                  : isListening
+                  ? "Stop listening"
+                  : "Start listening"
+              }
             >
               {isListening ? "🔴" : "🎤"}
             </button>
-            <p className="text-sm text-gray-500">
-              {isListening ? "Listening… speak now" : "Tap to speak"}
-            </p>
+
+            {/* Status label */}
+            {isAISpeaking ? (
+              <div className="flex items-center gap-2 text-sm text-indigo-600 font-medium">
+                <span className="flex gap-0.5">
+                  <span className="w-1.5 h-4 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-4 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-4 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                </span>
+                AI is speaking…
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                {isListening ? "Listening… speak now" : "Tap to speak"}
+              </p>
+            )}
           </div>
 
           {/* Transcript */}

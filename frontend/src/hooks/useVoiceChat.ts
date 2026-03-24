@@ -6,6 +6,7 @@ const WS_URL = API_URL.replace(/^http/, "ws");
 export function useVoiceChat() {
   const [isConnected, setIsConnected] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [transcript, setTranscript] = useState<string[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -14,6 +15,7 @@ export function useVoiceChat() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const audioQueueRef = useRef<ArrayBuffer[]>([]);
   const isPlayingRef = useRef(false);
+  const isAISpeakingRef = useRef(false);
 
   const appendTranscript = useCallback((line: string) => {
     setTranscript((prev) => [...prev, line]);
@@ -39,6 +41,18 @@ export function useVoiceChat() {
     } catch {
       isPlayingRef.current = false;
       playNextAudio();
+    }
+  }, []);
+
+  const cancelAIResponse = useCallback(() => {
+    // Clear the audio playback queue and stop current playback
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    isAISpeakingRef.current = false;
+    setIsAISpeaking(false);
+    // Signal OpenAI to cancel the in-progress response
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "response.cancel" }));
     }
   }, []);
 
@@ -77,13 +91,27 @@ export function useVoiceChat() {
       try {
         const msg = JSON.parse(event.data as string);
 
+        // Student started speaking — interrupt the AI if it's mid-response
+        if (msg.type === "input_audio_buffer.speech_started") {
+          if (isAISpeakingRef.current) {
+            cancelAIResponse();
+          }
+        }
+
         if (msg.type === "response.audio.delta" && msg.delta) {
-          // Base64-encoded audio delta
+          // Base64-encoded audio delta — mark AI as speaking
+          isAISpeakingRef.current = true;
+          setIsAISpeaking(true);
           const binary = atob(msg.delta);
           const bytes = new Uint8Array(binary.length);
           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
           audioQueueRef.current.push(bytes.buffer);
           playNextAudio();
+        }
+
+        if (msg.type === "response.done") {
+          isAISpeakingRef.current = false;
+          setIsAISpeaking(false);
         }
 
         if (msg.type === "conversation.item.input_audio_transcription.completed") {
@@ -99,26 +127,26 @@ export function useVoiceChat() {
             return [...prev, `Tutor: ${msg.delta}`];
           });
         }
-
-        if (msg.type === "response.done") {
-          // Response is complete
-        }
       } catch {}
     };
 
     ws.onclose = () => {
       setIsConnected(false);
       setIsListening(false);
+      setIsAISpeaking(false);
+      isAISpeakingRef.current = false;
       wsRef.current = null;
     };
 
     ws.onerror = () => {
       ws.close();
     };
-  }, [appendTranscript, playNextAudio]);
+  }, [appendTranscript, playNextAudio, cancelAIResponse]);
 
   const disconnect = useCallback(() => {
     setIsListening(false);
+    setIsAISpeaking(false);
+    isAISpeakingRef.current = false;
     processorRef.current?.disconnect();
     processorRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -182,5 +210,5 @@ export function useVoiceChat() {
     return () => { disconnect(); };
   }, [disconnect]);
 
-  return { isConnected, isListening, transcript, connect, disconnect, toggleListening };
+  return { isConnected, isListening, isAISpeaking, transcript, connect, disconnect, toggleListening };
 }

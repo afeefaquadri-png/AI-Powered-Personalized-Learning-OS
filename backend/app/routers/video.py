@@ -1,10 +1,11 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.rate_limiter import limiter
 from app.dependencies import get_current_user
 from app.models.sentiment_log import SentimentLog
 from app.schemas.sentiment import SentimentRequest, SentimentResponse
@@ -14,7 +15,9 @@ router = APIRouter()
 
 
 @router.post("/analyze", response_model=SentimentResponse)
+@limiter.limit("60/minute")
 async def analyze_frame_route(
+    request: Request,
     data: SentimentRequest,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),

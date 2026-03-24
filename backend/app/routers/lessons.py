@@ -1,12 +1,13 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
+from app.core.rate_limiter import limiter
 from app.dependencies import get_current_user
 from app.models.chapter import Chapter
 from app.models.chat_message import ChatMessage
@@ -93,7 +94,9 @@ async def get_lesson_content(
 
 
 @router.post("/{chapter_id}/chat")
+@limiter.limit("30/minute")
 async def teaching_chat(
+    request: Request,
     chapter_id: str,
     data: ChatRequest,
     user: dict = Depends(get_current_user),

@@ -5,40 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import ProgressBar from "@/components/ProgressBar";
-
-interface SubjectCard {
-  subject_id: string;
-  subject_name: string;
-  chapters_completed: number;
-  total_chapters: number;
-  average_score: number | null;
-}
-
-interface ProgressResponse {
-  student_id: string;
-  subjects: SubjectCard[];
-}
-
-interface Profile {
-  name: string;
-  grade: string;
-  board: string | null;
-  interests: string[];
-  onboarding_completed: boolean;
-}
-
-const subjectEmojis: Record<string, string> = {
-  Mathematics: "📐", Physics: "⚛️", Chemistry: "🧪", Biology: "🌿",
-  History: "📜", Geography: "🌍", English: "📖", "Computer Science": "💻",
-  Economics: "📊", "Political Science": "🏛️", Psychology: "🧠", Art: "🎨",
-};
+import { SUBJECT_EMOJIS } from "@/lib/constants";
+import type { SubjectProgress, ProgressResponse, StudentProfile } from "@/types/student";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useSupabaseAuth();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [subjects, setSubjects] = useState<SubjectCard[]>([]);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [subjects, setSubjects] = useState<SubjectProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +25,7 @@ export default function DashboardPage() {
 
     async function load() {
       try {
-        const prof = await apiGet<Profile>("/api/onboarding/profile");
+        const prof = await apiGet<StudentProfile>("/api/onboarding/profile");
         setProfile(prof);
         if (!prof.onboarding_completed) {
           router.push("/onboarding");
@@ -57,14 +33,8 @@ export default function DashboardPage() {
         }
       } catch (err) {
         if (err instanceof ApiError) {
-          if (err.status === 404) {
-            router.push("/onboarding");
-            return;
-          }
-          if (err.status === 401) {
-            router.push("/login");
-            return;
-          }
+          if (err.status === 404) { router.push("/onboarding"); return; }
+          if (err.status === 401) { router.push("/login"); return; }
         }
         setError("Failed to load profile. Please refresh.");
         setLoading(false);
@@ -75,7 +45,6 @@ export default function DashboardPage() {
         const progress = await apiGet<ProgressResponse>(`/api/progress/${user!.id}`);
         setSubjects(progress.subjects);
       } catch (err) {
-        // 404 just means no subjects yet — show empty state, not an error
         if (!(err instanceof ApiError && err.status === 404)) {
           setError("Failed to load progress. Please refresh.");
         }
@@ -86,6 +55,36 @@ export default function DashboardPage() {
 
     load();
   }, [user, authLoading, router]);
+
+  // Supabase Realtime — re-fetch progress when student_progress table changes
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`progress:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "student_progress",
+          filter: `student_id=eq.${user.id}`,
+        },
+        async () => {
+          try {
+            const progress = await apiGet<ProgressResponse>(`/api/progress/${user.id}`);
+            setSubjects(progress.subjects);
+          } catch {
+            // Silently ignore — stale data is acceptable
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   async function handleGenerateCurriculum(subjectName: string) {
     setGenerating(subjectName);
@@ -120,6 +119,10 @@ export default function DashboardPage() {
   const pendingSubjects = profile?.interests?.filter(
     (interest) => !subjects.some((s) => s.subject_name === interest)
   ) ?? [];
+
+  // Aggregate strengths and weaknesses across all subjects
+  const allStrengths = subjects.flatMap((s) => s.strengths ?? []);
+  const allWeaknesses = subjects.flatMap((s) => s.weaknesses ?? []);
 
   return (
     <main className="min-h-[calc(100vh-64px)] bg-gray-50 px-4 py-8">
@@ -161,7 +164,7 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <span className="text-2xl">
-                        {subjectEmojis[subject.subject_name] ?? "📚"}
+                        {SUBJECT_EMOJIS[subject.subject_name] ?? "📚"}
                       </span>
                       <h3 className="font-semibold text-gray-900 mt-1">{subject.subject_name}</h3>
                     </div>
@@ -192,7 +195,7 @@ export default function DashboardPage() {
 
         {/* Subjects from interests that have no curriculum yet */}
         {pendingSubjects.length > 0 && (
-          <section>
+          <section className="mb-8">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Ready to Start</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {pendingSubjects.map((subjectName) => (
@@ -200,7 +203,7 @@ export default function DashboardPage() {
                   key={subjectName}
                   className="bg-white rounded-2xl border border-dashed border-gray-300 p-5"
                 >
-                  <span className="text-2xl">{subjectEmojis[subjectName] ?? "📚"}</span>
+                  <span className="text-2xl">{SUBJECT_EMOJIS[subjectName] ?? "📚"}</span>
                   <h3 className="font-semibold text-gray-900 mt-1 mb-1">{subjectName}</h3>
                   <p className="text-xs text-gray-400 mb-4">
                     No curriculum yet. Click below to generate one with AI.
@@ -233,6 +236,45 @@ export default function DashboardPage() {
               Complete onboarding to add subjects →
             </Link>
           </div>
+        )}
+
+        {/* Learning Profile — shown once activity evaluations have populated strengths/weaknesses */}
+        {(allStrengths.length > 0 || allWeaknesses.length > 0) && (
+          <section className="mt-4">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Learning Profile</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {allStrengths.length > 0 && (
+                <div className="bg-green-50 rounded-2xl border border-green-100 p-5">
+                  <h3 className="font-semibold text-green-900 mb-3 text-sm uppercase tracking-wide">
+                    Strengths
+                  </h3>
+                  <ul className="space-y-1.5">
+                    {allStrengths.map((s, i) => (
+                      <li key={i} className="text-sm text-green-800 flex gap-2 items-start">
+                        <span className="text-green-500 mt-0.5">✓</span>
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {allWeaknesses.length > 0 && (
+                <div className="bg-amber-50 rounded-2xl border border-amber-100 p-5">
+                  <h3 className="font-semibold text-amber-900 mb-3 text-sm uppercase tracking-wide">
+                    Areas to Improve
+                  </h3>
+                  <ul className="space-y-1.5">
+                    {allWeaknesses.map((w, i) => (
+                      <li key={i} className="text-sm text-amber-800 flex gap-2 items-start">
+                        <span className="text-amber-500 mt-0.5">→</span>
+                        {w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
         )}
       </div>
     </main>
