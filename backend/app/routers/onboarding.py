@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.supabase_client import get_supabase_client
 from app.dependencies import get_current_user
+from app.models.chapter import Chapter
 from app.models.progress import StudentProgress
 from app.models.student import Student
 from app.models.subject import Subject
 from app.schemas.onboarding import OnboardingRequest, OnboardingResponse
+from app.services.syllabus_data import get_syllabus
 
 router = APIRouter()
 
@@ -21,7 +23,7 @@ async def save_onboarding(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Save student profile from onboarding wizard and trigger curriculum generation."""
+    """Save student profile from onboarding wizard and seed curriculum from syllabus data."""
     student_id = uuid.UUID(user["sub"])
 
     # Upsert student record
@@ -45,7 +47,7 @@ async def save_onboarding(
         )
         db.add(student)
 
-    # Create a subject entry for each area of interest
+    # Create a subject entry + seed chapters for each area of interest
     subjects_created = []
     for interest in data.interests:
         # Check if subject already exists
@@ -69,12 +71,28 @@ async def save_onboarding(
         db.add(subject)
         await db.flush()
 
+        # Seed chapters from official syllabus if available
+        syllabus_chapters = get_syllabus(data.board, interest, data.grade) if data.board and data.grade else None
+        chapter_count = 0
+        if syllabus_chapters:
+            for ch in syllabus_chapters:
+                chapter = Chapter(
+                    subject_id=subject.id,
+                    order_index=ch["order_index"],
+                    title=ch["title"],
+                    description=ch["description"],
+                    status="available",
+                )
+                db.add(chapter)
+                chapter_count += 1
+            subject.status = "in_progress"
+
         # Create a corresponding progress record
         progress = StudentProgress(
             student_id=student_id,
             subject_id=subject.id,
             chapters_completed=0,
-            total_chapters=0,
+            total_chapters=chapter_count,
         )
         db.add(progress)
         subjects_created.append(interest)

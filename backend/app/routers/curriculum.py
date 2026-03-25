@@ -61,10 +61,11 @@ async def generate_curriculum_route(
         )
         db.add(subject)
         await db.flush()
-    else:
-        # Delete existing chapters if regenerating
-        from sqlalchemy import delete as sql_delete
-        await db.execute(sql_delete(Chapter).where(Chapter.subject_id == subject.id))
+
+    # Delete all existing chapters before (re)generating to prevent duplicates
+    from sqlalchemy import delete as sql_delete
+    await db.execute(sql_delete(Chapter).where(Chapter.subject_id == subject.id))
+    await db.flush()
 
     # Create chapter records
     chapters_out = []
