@@ -1,7 +1,7 @@
-import json
 import uuid
 
-from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
@@ -22,7 +22,7 @@ async def analyze_frame_route(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Analyze a video frame for student sentiment via Claude Vision."""
+    """Analyze a video frame for student sentiment via Claude Vision and persist the result."""
     student_id = uuid.UUID(user["sub"])
 
     result = await analyze_frame(data.frame_base64)
@@ -30,64 +30,54 @@ async def analyze_frame_route(
     confidence = result.get("confidence", 0.5)
     action = determine_adaptive_action(emotion, confidence)
 
-    # Persist the sentiment log
-    log = SentimentLog(
-        student_id=student_id,
-        chapter_id=uuid.UUID(data.chapter_id),
-        emotion=emotion,
-        confidence=confidence,
-        action_taken=action,
+    # Only persist when a valid chapter_id UUID is provided
+    chapter_uuid: uuid.UUID | None = None
+    if data.chapter_id:
+        try:
+            chapter_uuid = uuid.UUID(data.chapter_id)
+        except ValueError:
+            pass
+
+    if chapter_uuid:
+        log = SentimentLog(
+            student_id=student_id,
+            chapter_id=chapter_uuid,
+            emotion=emotion,
+            confidence=confidence,
+            action_taken=action,
+        )
+        db.add(log)
+        await db.commit()
+
+    return SentimentResponse(emotion=emotion, confidence=confidence, action_taken=action)
+
+
+@router.get("/sentiment/history")
+async def get_sentiment_history(
+    response: Response,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+    limit: int = 100,
+):
+    """Return the student's recent sentiment log entries."""
+    student_id = uuid.UUID(user["sub"])
+
+    result = await db.execute(
+        select(SentimentLog)
+        .where(SentimentLog.student_id == student_id)
+        .order_by(SentimentLog.timestamp.desc())
+        .limit(limit)
     )
-    db.add(log)
-    await db.commit()
+    logs = result.scalars().all()
+    response.headers["Cache-Control"] = "private, max-age=30"
 
-    return SentimentResponse(
-        emotion=emotion,
-        confidence=confidence,
-        action_taken=action,
-    )
-
-
-@router.websocket("/sentiment/ws")
-async def sentiment_websocket(websocket: WebSocket):
-    """WebSocket for streaming live sentiment analysis."""
-    await websocket.accept()
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            data = json.loads(raw)
-            frame_base64 = data.get("frame_base64", "")
-            chapter_id = data.get("chapter_id", "")
-
-            if not frame_base64:
-                await websocket.send_json({"error": "No frame data provided"})
-                continue
-
-            try:
-                result = await analyze_frame(frame_base64)
-                emotion = result.get("emotion", "engaged")
-                confidence = result.get("confidence", 0.5)
-                action = determine_adaptive_action(emotion, confidence)
-
-                await websocket.send_json(
-                    {
-                        "emotion": emotion,
-                        "confidence": confidence,
-                        "action_taken": action,
-                        "chapter_id": chapter_id,
-                    }
-                )
-            except Exception as e:
-                # Fall back to a neutral response on analysis errors
-                await websocket.send_json(
-                    {
-                        "emotion": "engaged",
-                        "confidence": 0.3,
-                        "action_taken": None,
-                        "error": str(e),
-                    }
-                )
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
+    return [
+        {
+            "emotion": log.emotion,
+            "confidence": log.confidence,
+            "action_taken": log.action_taken,
+            "timestamp": log.timestamp.isoformat(),
+            "chapter_id": str(log.chapter_id) if log.chapter_id else None,
+        }
+        for log in logs
+    ]

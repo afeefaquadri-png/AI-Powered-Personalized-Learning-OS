@@ -9,6 +9,23 @@ import { SUBJECT_EMOJIS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { ProgressResponse, SubjectProgress } from "@/types/student";
 
+interface SentimentEntry {
+  emotion: string;
+  confidence: number;
+  action_taken: string | null;
+  timestamp: string;
+  chapter_id: string | null;
+}
+
+const EMOTION_CONFIG: Record<string, { color: string; bg: string; dot: string; label: string; emoji: string }> = {
+  engaged:    { color: "text-green-400",   bg: "bg-green-500/10",   dot: "bg-green-500",   label: "Engaged",    emoji: "🎯" },
+  happy:      { color: "text-emerald-400", bg: "bg-emerald-500/10", dot: "bg-emerald-400", label: "Happy",      emoji: "😊" },
+  confused:   { color: "text-yellow-400",  bg: "bg-yellow-500/10",  dot: "bg-yellow-400",  label: "Confused",   emoji: "🤔" },
+  bored:      { color: "text-orange-400",  bg: "bg-orange-500/10",  dot: "bg-orange-400",  label: "Bored",      emoji: "😐" },
+  frustrated: { color: "text-red-400",     bg: "bg-red-500/10",     dot: "bg-red-500",     label: "Frustrated", emoji: "😤" },
+  drowsy:     { color: "text-slate-400",   bg: "bg-slate-500/10",   dot: "bg-slate-500",   label: "Drowsy",     emoji: "😴" },
+};
+
 function StatCard({ value, label, color }: { value: string | number; label: string; color: string }) {
   return (
     <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5 text-center">
@@ -22,6 +39,7 @@ export default function AnalyticsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useSupabaseAuth();
   const [subjects, setSubjects] = useState<SubjectProgress[]>([]);
+  const [sentimentLogs, setSentimentLogs] = useState<SentimentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,10 +47,14 @@ export default function AnalyticsPage() {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
 
-    apiGet<ProgressResponse>(`/api/progress/${user.id}`)
-      .then((data) => setSubjects(data.subjects))
-      .catch(() => setError("Failed to load analytics. Please try again."))
-      .finally(() => setLoading(false));
+    Promise.allSettled([
+      apiGet<ProgressResponse>(`/api/progress/${user.id}`, 20_000),
+      apiGet<SentimentEntry[]>("/api/video/sentiment/history", 20_000),
+    ]).then(([progressResult, sentimentResult]) => {
+      if (progressResult.status === "fulfilled") setSubjects(progressResult.value.subjects);
+      else setError("Failed to load analytics. Please try again.");
+      if (sentimentResult.status === "fulfilled") setSentimentLogs(sentimentResult.value);
+    }).finally(() => setLoading(false));
   }, [user, authLoading, router]);
 
   if (authLoading || loading) {
@@ -125,29 +147,119 @@ export default function AnalyticsPage() {
           </section>
         )}
 
-        {/* Sentiment history placeholder */}
+        {/* Sentiment history */}
         <section className="mb-8">
-          <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Sentiment History</h2>
-          <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-8 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-white/30">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                <path d="M8 14s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <circle cx="9" cy="10" r="1" fill="currentColor" />
-                <circle cx="15" cy="10" r="1" fill="currentColor" />
-              </svg>
+          <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Engagement History</h2>
+
+          {sentimentLogs.length === 0 ? (
+            <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-8 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-white/30">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="9" cy="10" r="1" fill="currentColor" />
+                  <circle cx="15" cy="10" r="1" fill="currentColor" />
+                </svg>
+              </div>
+              <p className="font-medium text-white/60">No sentiment data yet</p>
+              <p className="text-sm text-white/30 mt-1">Enable your camera during a lesson to start tracking engagement.</p>
+              <Link href="/video-session" className="mt-4 inline-block text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                Start a video session →
+              </Link>
             </div>
-            <p className="font-medium text-white/60">Engagement Timeline</p>
-            <p className="text-sm text-white/30 mt-1">
-              Sentiment data will appear here once you start video-enabled learning sessions.
-            </p>
-            <Link
-              href="/video-session"
-              className="mt-4 inline-block text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              Start a video session →
-            </Link>
-          </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Emotion distribution */}
+              {(() => {
+                const counts: Record<string, number> = {};
+                for (const e of sentimentLogs) counts[e.emotion] = (counts[e.emotion] ?? 0) + 1;
+                const total = sentimentLogs.length;
+                const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                return (
+                  <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5">
+                    <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">
+                      Emotion Distribution · {total} readings
+                    </p>
+                    <div className="space-y-3">
+                      {sorted.map(([emotion, count]) => {
+                        const cfg = EMOTION_CONFIG[emotion];
+                        const pct = Math.round((count / total) * 100);
+                        return (
+                          <div key={emotion} className="flex items-center gap-3">
+                            <span className="text-base w-6">{cfg?.emoji ?? "😶"}</span>
+                            <span className="text-sm text-white/70 w-24 shrink-0">{cfg?.label ?? emotion}</span>
+                            <div className="flex-1 h-2 bg-white/[0.07] rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-700 ${cfg?.dot ?? "bg-slate-500"}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-white/40 w-10 text-right shrink-0">{pct}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Timeline dots */}
+              <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5">
+                <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
+                  Recent Timeline (newest → oldest)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {sentimentLogs.slice(0, 60).map((entry, i) => {
+                    const cfg = EMOTION_CONFIG[entry.emotion];
+                    return (
+                      <div
+                        key={i}
+                        title={`${cfg?.label ?? entry.emotion} · ${Math.round(entry.confidence * 100)}% · ${new Date(entry.timestamp).toLocaleTimeString()}`}
+                        className={`w-5 h-5 rounded-full cursor-default ${cfg?.dot ?? "bg-slate-500"}`}
+                        style={{ opacity: 0.35 + entry.confidence * 0.65 }}
+                      />
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-white/20 mt-3">
+                  Each dot = one reading. Opacity reflects confidence.
+                </p>
+              </div>
+
+              {/* Recent log entries */}
+              <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl overflow-hidden">
+                <div className="px-5 py-3 border-b border-white/[0.06]">
+                  <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Recent Readings</p>
+                </div>
+                <div className="divide-y divide-white/[0.04]">
+                  {sentimentLogs.slice(0, 10).map((entry, i) => {
+                    const cfg = EMOTION_CONFIG[entry.emotion];
+                    return (
+                      <div key={i} className="px-5 py-3 flex items-center gap-3">
+                        <span className="text-base">{cfg?.emoji ?? "😶"}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium ${cfg?.color ?? "text-white/60"}`}>
+                              {cfg?.label ?? entry.emotion}
+                            </span>
+                            <span className="text-xs text-white/30">
+                              {Math.round(entry.confidence * 100)}% confidence
+                            </span>
+                          </div>
+                          {entry.action_taken && (
+                            <p className="text-xs text-white/30 mt-0.5 truncate">{entry.action_taken}</p>
+                          )}
+                        </div>
+                        <span className="text-xs text-white/25 shrink-0">
+                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Learning profile */}
