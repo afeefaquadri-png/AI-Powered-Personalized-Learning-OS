@@ -96,8 +96,8 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Nav links */}
-        {!loading && user && (
+        {/* Nav links — only on app pages (not marketing/auth) */}
+        {!loading && user && !['/', '/login', '/register'].includes(pathname) && (
           <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
             {NAV_LINKS.map(({ href, label, icon }) => {
               const active = isActive(href);

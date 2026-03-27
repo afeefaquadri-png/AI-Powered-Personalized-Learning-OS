@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
+import StepIndicator from "./components/StepIndicator";
+import BoardSelector from "./components/BoardSelector";
+import SubjectSelector from "./components/SubjectSelector";
+import MarksheetUpload from "./components/MarksheetUpload";
 
 const GRADE_OPTIONS = ["K", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const SUBJECT_OPTIONS = [
@@ -137,25 +141,7 @@ export default function OnboardingPage() {
     <main className="flex min-h-[calc(100vh-64px)] items-center justify-center px-4 py-8">
       <div className="w-full max-w-xl">
         {/* Step indicator */}
-        <div className="flex items-center justify-between mb-8">
-          {steps.map((s, i) => (
-            <div key={s.num} className="flex items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                  step >= s.num ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"
-                }`}
-              >
-                {step > s.num ? "✓" : s.num}
-              </div>
-              <span className={`ml-2 text-sm hidden sm:block ${step >= s.num ? "text-blue-600 font-medium" : "text-gray-400"}`}>
-                {s.label}
-              </span>
-              {i < steps.length - 1 && (
-                <div className={`mx-3 flex-1 h-0.5 w-6 sm:w-12 ${step > s.num ? "bg-blue-600" : "bg-gray-200"}`} />
-              )}
-            </div>
-          ))}
-        </div>
+        <StepIndicator steps={steps} currentStep={step} />
 
         <div className="bg-white rounded-2xl shadow-sm border p-8">
           {/* Step 1: Basic info */}
@@ -211,31 +197,7 @@ export default function OnboardingPage() {
                   We&apos;ll use the official syllabus so chapter names match your textbooks exactly.
                 </p>
               </div>
-              <div className="space-y-2">
-                {BOARD_OPTIONS.map((b) => (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => setBoard(b.id)}
-                    className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition ${
-                      board === b.id
-                        ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600"
-                        : "border-gray-200 hover:border-blue-300"
-                    }`}
-                  >
-                    <span className="text-xl mt-0.5">{b.flag}</span>
-                    <div>
-                      <p className={`font-semibold text-sm ${board === b.id ? "text-blue-700" : "text-gray-900"}`}>
-                        {b.name}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">{b.description}</p>
-                    </div>
-                    {board === b.id && (
-                      <span className="ml-auto text-blue-600 font-bold text-lg">✓</span>
-                    )}
-                  </button>
-                ))}
-              </div>
+              <BoardSelector options={BOARD_OPTIONS} selected={board} onSelect={setBoard} />
               <div className="flex gap-3">
                 <button onClick={() => setStep(1)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition">
                   ← Back
@@ -261,22 +223,7 @@ export default function OnboardingPage() {
                 <h2 className="text-xl font-bold text-gray-900">What do you want to learn?</h2>
                 <p className="text-gray-500 text-sm mt-1">Pick one or more subjects. You can add more later.</p>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {SUBJECT_OPTIONS.map((subject) => (
-                  <button
-                    key={subject}
-                    type="button"
-                    onClick={() => toggleSubject(subject)}
-                    className={`px-3 py-2.5 rounded-lg text-sm font-medium border transition text-left ${
-                      interests.includes(subject)
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-blue-400"
-                    }`}
-                  >
-                    {subject}
-                  </button>
-                ))}
-              </div>
+              <SubjectSelector options={SUBJECT_OPTIONS} selected={interests} onToggle={toggleSubject} />
               <div className="flex gap-3">
                 <button onClick={() => setStep(2)} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition">
                   ← Back
@@ -346,34 +293,7 @@ export default function OnboardingPage() {
                   Optional — helps us understand your current level and personalise your curriculum.
                 </p>
               </div>
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
-                {marksheetFile ? (
-                  <div className="space-y-2">
-                    <div className="text-3xl">📄</div>
-                    <p className="font-medium text-gray-700">{marksheetFile.name}</p>
-                    <button
-                      onClick={() => setMarksheetFile(null)}
-                      className="text-sm text-red-500 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer">
-                    <div className="text-3xl mb-2">📤</div>
-                    <p className="text-sm text-gray-600">
-                      Click to upload a marksheet / report card
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">PDF, JPEG, PNG — max 10 MB</p>
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.webp"
-                      className="hidden"
-                      onChange={(e) => setMarksheetFile(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                )}
-              </div>
+              <MarksheetUpload file={marksheetFile} onChange={setMarksheetFile} />
 
               {error && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">

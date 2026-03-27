@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+  AreaChart, Area,
+} from "recharts";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { apiGet } from "@/lib/api";
 import { SUBJECT_EMOJIS } from "@/lib/constants";
@@ -17,20 +22,60 @@ interface SentimentEntry {
   chapter_id: string | null;
 }
 
-const EMOTION_CONFIG: Record<string, { color: string; bg: string; dot: string; label: string; emoji: string }> = {
-  engaged:    { color: "text-green-400",   bg: "bg-green-500/10",   dot: "bg-green-500",   label: "Engaged",    emoji: "🎯" },
-  happy:      { color: "text-emerald-400", bg: "bg-emerald-500/10", dot: "bg-emerald-400", label: "Happy",      emoji: "😊" },
-  confused:   { color: "text-yellow-400",  bg: "bg-yellow-500/10",  dot: "bg-yellow-400",  label: "Confused",   emoji: "🤔" },
-  bored:      { color: "text-orange-400",  bg: "bg-orange-500/10",  dot: "bg-orange-400",  label: "Bored",      emoji: "😐" },
-  frustrated: { color: "text-red-400",     bg: "bg-red-500/10",     dot: "bg-red-500",     label: "Frustrated", emoji: "😤" },
-  drowsy:     { color: "text-slate-400",   bg: "bg-slate-500/10",   dot: "bg-slate-500",   label: "Drowsy",     emoji: "😴" },
+const EMOTION_CONFIG: Record<string, { hex: string; dot: string; label: string; emoji: string; color: string }> = {
+  engaged:    { hex: "#22c55e",  dot: "bg-green-500",   label: "Engaged",    emoji: "🎯", color: "text-green-400"   },
+  happy:      { hex: "#10b981",  dot: "bg-emerald-400", label: "Happy",      emoji: "😊", color: "text-emerald-400" },
+  confused:   { hex: "#eab308",  dot: "bg-yellow-400",  label: "Confused",   emoji: "🤔", color: "text-yellow-400"  },
+  bored:      { hex: "#f97316",  dot: "bg-orange-400",  label: "Bored",      emoji: "😐", color: "text-orange-400"  },
+  frustrated: { hex: "#ef4444",  dot: "bg-red-500",     label: "Frustrated", emoji: "😤", color: "text-red-400"     },
+  drowsy:     { hex: "#64748b",  dot: "bg-slate-500",   label: "Drowsy",     emoji: "😴", color: "text-slate-400"   },
 };
+
+// All emotion keys used for the area chart layers
+const EMOTION_KEYS = Object.keys(EMOTION_CONFIG);
 
 function StatCard({ value, label, color }: { value: string | number; label: string; color: string }) {
   return (
     <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5 text-center">
       <p className={cn("text-4xl font-bold", color)}>{value}</p>
       <p className="text-xs text-white/40 mt-1.5 font-medium">{label}</p>
+    </div>
+  );
+}
+
+/** Build time-bucketed data for the sentiment area chart (30-minute windows). */
+function buildSentimentTimeline(logs: SentimentEntry[]) {
+  if (logs.length === 0) return [];
+  const sorted = [...logs].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+
+  const buckets: Record<string, Record<string, number>> = {};
+  for (const entry of sorted) {
+    const d = new Date(entry.timestamp);
+    // 30-minute bucket key
+    d.setMinutes(Math.floor(d.getMinutes() / 30) * 30, 0, 0);
+    const key = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (!buckets[key]) buckets[key] = {};
+    buckets[key][entry.emotion] = (buckets[key][entry.emotion] ?? 0) + 1;
+  }
+
+  return Object.entries(buckets).map(([time, counts]) => ({ time, ...counts }));
+}
+
+// Custom dark tooltip for recharts
+function DarkTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; fill: string }[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-[#0d1424] border border-white/[0.1] rounded-xl px-3 py-2 text-xs shadow-xl">
+      <p className="text-white/50 mb-1.5">{label}</p>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2 mb-0.5">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.fill }} />
+          <span className="text-white/70 capitalize">{p.name}</span>
+          <span className="text-white font-semibold ml-auto pl-3">{p.value}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -42,6 +87,7 @@ export default function AnalyticsPage() {
   const [sentimentLogs, setSentimentLogs] = useState<SentimentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [liveIndicator, setLiveIndicator] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -49,13 +95,48 @@ export default function AnalyticsPage() {
 
     Promise.allSettled([
       apiGet<ProgressResponse>(`/api/progress/${user.id}`, 20_000),
-      apiGet<SentimentEntry[]>("/api/video/sentiment/history", 20_000),
+      apiGet<SentimentEntry[]>("/api/video/sentiment/history?limit=200", 20_000),
     ]).then(([progressResult, sentimentResult]) => {
       if (progressResult.status === "fulfilled") setSubjects(progressResult.value.subjects);
       else setError("Failed to load analytics. Please try again.");
       if (sentimentResult.status === "fulfilled") setSentimentLogs(sentimentResult.value);
     }).finally(() => setLoading(false));
   }, [user, authLoading, router]);
+
+  // ── Supabase Realtime: live sentiment updates ─────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+
+    let channel: ReturnType<typeof import("@/lib/supabase")["supabase"]["channel"]> | null = null;
+
+    import("@/lib/supabase").then(({ supabase }) => {
+      channel = supabase
+        .channel(`analytics:sentiment:${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "sentiment_logs",
+            filter: `student_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const newEntry = payload.new as SentimentEntry;
+            setSentimentLogs((prev) => [newEntry, ...prev].slice(0, 200));
+            // Flash live indicator
+            setLiveIndicator(true);
+            setTimeout(() => setLiveIndicator(false), 2000);
+          }
+        )
+        .subscribe();
+    });
+
+    return () => {
+      if (channel) {
+        import("@/lib/supabase").then(({ supabase }) => supabase.removeChannel(channel!));
+      }
+    };
+  }, [user]);
 
   if (authLoading || loading) {
     return (
@@ -68,6 +149,7 @@ export default function AnalyticsPage() {
     );
   }
 
+  // ── Derived data ────────────────────────────────────────────────────────
   const activeSubjects = subjects.filter((s) => s.total_chapters > 0);
   const totalChaptersDone = subjects.reduce((sum, s) => sum + s.chapters_completed, 0);
   const totalChapters = subjects.reduce((sum, s) => sum + s.total_chapters, 0);
@@ -79,9 +161,24 @@ export default function AnalyticsPage() {
   const allStrengths = subjects.flatMap((s) => s.strengths ?? []);
   const allWeaknesses = subjects.flatMap((s) => s.weaknesses ?? []);
 
+  // Chart data
+  const scoreBarData = scoredSubjects.map((s) => ({
+    name: s.subject_name.length > 10 ? s.subject_name.slice(0, 10) + "…" : s.subject_name,
+    score: Math.round(s.average_score ?? 0),
+    fill: (s.average_score ?? 0) >= 80 ? "#22c55e" : (s.average_score ?? 0) >= 60 ? "#eab308" : "#ef4444",
+  }));
+
+  const emotionCounts: Record<string, number> = {};
+  for (const e of sentimentLogs) emotionCounts[e.emotion] = (emotionCounts[e.emotion] ?? 0) + 1;
+  const pieData = Object.entries(emotionCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value]) => ({ name, value, fill: EMOTION_CONFIG[name]?.hex ?? "#64748b" }));
+
+  const timelineData = buildSentimentTimeline(sentimentLogs.slice(0, 100));
+
   return (
     <main className="min-h-[calc(100vh-64px)] bg-[#080d1a] px-4 py-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
 
         {/* Header */}
         <Link
@@ -94,9 +191,17 @@ export default function AnalyticsPage() {
           Dashboard
         </Link>
 
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white tracking-tight">Analytics</h1>
-          <p className="text-sm text-white/40 mt-1">Track your learning progress across all subjects.</p>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Analytics</h1>
+            <p className="text-sm text-white/40 mt-1">Track your learning progress across all subjects.</p>
+          </div>
+          {liveIndicator && (
+            <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-3 py-1.5 text-xs text-green-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Live update
+            </div>
+          )}
         </div>
 
         {error && (
@@ -113,10 +218,37 @@ export default function AnalyticsPage() {
           <StatCard value={avgScore !== null ? `${avgScore}%` : "—"} label="Avg Score" color="text-amber-400" />
         </section>
 
-        {/* Per-subject progress */}
+        {/* ── Score bar chart ── */}
+        {scoreBarData.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Score by Subject</h2>
+            <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={scoreBarData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="name" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                  <Bar dataKey="score" radius={[6, 6, 0, 0]}>
+                    {scoreBarData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex gap-4 mt-2 justify-center text-xs text-white/30">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" />≥80%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400" />60–79%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />&lt;60%</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Per-subject progress bars ── */}
         {activeSubjects.length > 0 && (
           <section className="mb-8">
-            <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Progress by Subject</h2>
+            <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Chapter Progress</h2>
             <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-6 space-y-5">
               {activeSubjects.map((s) => {
                 const pct = s.total_chapters > 0 ? Math.round((s.chapters_completed / s.total_chapters) * 100) : 0;
@@ -126,7 +258,7 @@ export default function AnalyticsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between text-sm mb-1.5">
                         <span className="font-medium text-white/80">{s.subject_name}</span>
-                        <span className="text-white/40">{s.chapters_completed} / {s.total_chapters} chapters</span>
+                        <span className="text-white/40">{s.chapters_completed} / {s.total_chapters}</span>
                       </div>
                       <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
                         <div
@@ -147,11 +279,130 @@ export default function AnalyticsPage() {
           </section>
         )}
 
-        {/* Sentiment history */}
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Engagement History</h2>
+        {/* ── Sentiment section ── */}
+        {sentimentLogs.length > 0 && (
+          <>
+            {/* Emotion timeline area chart */}
+            {timelineData.length > 1 && (
+              <section className="mb-8">
+                <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">
+                  Engagement Timeline
+                  <span className="ml-2 text-white/25 font-normal normal-case">30-min buckets</span>
+                </h2>
+                <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={timelineData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="time" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <Tooltip content={<DarkTooltip />} />
+                      {EMOTION_KEYS.map((key) => (
+                        <Area
+                          key={key}
+                          type="monotone"
+                          dataKey={key}
+                          stackId="1"
+                          stroke={EMOTION_CONFIG[key].hex}
+                          fill={EMOTION_CONFIG[key].hex}
+                          fillOpacity={0.6}
+                          strokeWidth={1.5}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            )}
 
-          {sentimentLogs.length === 0 ? (
+            {/* Pie chart + recent readings side by side */}
+            <section className="mb-8">
+              <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">
+                Emotion Distribution
+                <span className="ml-2 text-white/25 font-normal normal-case">· {sentimentLogs.length} readings</span>
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                {/* Donut chart */}
+                <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={85}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {pieData.map((entry, i) => (
+                          <Cell key={i} fill={entry.fill} stroke="transparent" />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value, name) => [value, EMOTION_CONFIG[String(name)]?.label ?? name]}
+                        contentStyle={{ background: "#0d1424", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, fontSize: 12 }}
+                        labelStyle={{ color: "rgba(255,255,255,0.5)" }}
+                        itemStyle={{ color: "rgba(255,255,255,0.8)" }}
+                      />
+                      <Legend
+                        formatter={(value) => (
+                          <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>
+                            {EMOTION_CONFIG[value]?.emoji} {EMOTION_CONFIG[value]?.label ?? value}
+                          </span>
+                        )}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Recent readings list */}
+                <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl overflow-hidden">
+                  <div className="px-5 py-3 border-b border-white/[0.06] flex items-center justify-between">
+                    <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Recent Readings</p>
+                    {liveIndicator && (
+                      <span className="flex items-center gap-1 text-xs text-green-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                        Live
+                      </span>
+                    )}
+                  </div>
+                  <div className="divide-y divide-white/[0.04] max-h-[220px] overflow-y-auto">
+                    {sentimentLogs.slice(0, 12).map((entry, i) => {
+                      const cfg = EMOTION_CONFIG[entry.emotion];
+                      return (
+                        <div key={i} className="px-5 py-2.5 flex items-center gap-3">
+                          <span className="text-base">{cfg?.emoji ?? "😶"}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={cn("text-sm font-medium", cfg?.color ?? "text-white/60")}>
+                                {cfg?.label ?? entry.emotion}
+                              </span>
+                              <span className="text-xs text-white/25">
+                                {Math.round(entry.confidence * 100)}%
+                              </span>
+                            </div>
+                            {entry.action_taken && (
+                              <p className="text-xs text-white/25 truncate mt-0.5">{entry.action_taken}</p>
+                            )}
+                          </div>
+                          <span className="text-xs text-white/20 shrink-0">
+                            {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* No sentiment yet */}
+        {sentimentLogs.length === 0 && (
+          <section className="mb-8">
+            <h2 className="text-sm font-semibold text-white/60 uppercase tracking-wider mb-4">Engagement History</h2>
             <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-8 text-center">
               <div className="w-12 h-12 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-white/30">
@@ -167,100 +418,8 @@ export default function AnalyticsPage() {
                 Start a video session →
               </Link>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Emotion distribution */}
-              {(() => {
-                const counts: Record<string, number> = {};
-                for (const e of sentimentLogs) counts[e.emotion] = (counts[e.emotion] ?? 0) + 1;
-                const total = sentimentLogs.length;
-                const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-                return (
-                  <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5">
-                    <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">
-                      Emotion Distribution · {total} readings
-                    </p>
-                    <div className="space-y-3">
-                      {sorted.map(([emotion, count]) => {
-                        const cfg = EMOTION_CONFIG[emotion];
-                        const pct = Math.round((count / total) * 100);
-                        return (
-                          <div key={emotion} className="flex items-center gap-3">
-                            <span className="text-base w-6">{cfg?.emoji ?? "😶"}</span>
-                            <span className="text-sm text-white/70 w-24 shrink-0">{cfg?.label ?? emotion}</span>
-                            <div className="flex-1 h-2 bg-white/[0.07] rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all duration-700 ${cfg?.dot ?? "bg-slate-500"}`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-white/40 w-10 text-right shrink-0">{pct}%</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Timeline dots */}
-              <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5">
-                <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
-                  Recent Timeline (newest → oldest)
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {sentimentLogs.slice(0, 60).map((entry, i) => {
-                    const cfg = EMOTION_CONFIG[entry.emotion];
-                    return (
-                      <div
-                        key={i}
-                        title={`${cfg?.label ?? entry.emotion} · ${Math.round(entry.confidence * 100)}% · ${new Date(entry.timestamp).toLocaleTimeString()}`}
-                        className={`w-5 h-5 rounded-full cursor-default ${cfg?.dot ?? "bg-slate-500"}`}
-                        style={{ opacity: 0.35 + entry.confidence * 0.65 }}
-                      />
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-white/20 mt-3">
-                  Each dot = one reading. Opacity reflects confidence.
-                </p>
-              </div>
-
-              {/* Recent log entries */}
-              <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl overflow-hidden">
-                <div className="px-5 py-3 border-b border-white/[0.06]">
-                  <p className="text-xs font-semibold text-white/40 uppercase tracking-wider">Recent Readings</p>
-                </div>
-                <div className="divide-y divide-white/[0.04]">
-                  {sentimentLogs.slice(0, 10).map((entry, i) => {
-                    const cfg = EMOTION_CONFIG[entry.emotion];
-                    return (
-                      <div key={i} className="px-5 py-3 flex items-center gap-3">
-                        <span className="text-base">{cfg?.emoji ?? "😶"}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm font-medium ${cfg?.color ?? "text-white/60"}`}>
-                              {cfg?.label ?? entry.emotion}
-                            </span>
-                            <span className="text-xs text-white/30">
-                              {Math.round(entry.confidence * 100)}% confidence
-                            </span>
-                          </div>
-                          {entry.action_taken && (
-                            <p className="text-xs text-white/30 mt-0.5 truncate">{entry.action_taken}</p>
-                          )}
-                        </div>
-                        <span className="text-xs text-white/25 shrink-0">
-                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
+          </section>
+        )}
 
         {/* Learning profile */}
         {(allStrengths.length > 0 || allWeaknesses.length > 0) && (
@@ -273,8 +432,7 @@ export default function AnalyticsPage() {
                   <ul className="space-y-2">
                     {allStrengths.map((s, i) => (
                       <li key={i} className="text-sm text-white/60 flex gap-2 items-start">
-                        <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>
-                        {s}
+                        <span className="text-emerald-400 mt-0.5 flex-shrink-0">✓</span>{s}
                       </li>
                     ))}
                   </ul>
@@ -286,8 +444,7 @@ export default function AnalyticsPage() {
                   <ul className="space-y-2">
                     {allWeaknesses.map((w, i) => (
                       <li key={i} className="text-sm text-white/60 flex gap-2 items-start">
-                        <span className="text-amber-400 mt-0.5 flex-shrink-0">→</span>
-                        {w}
+                        <span className="text-amber-400 mt-0.5 flex-shrink-0">→</span>{w}
                       </li>
                     ))}
                   </ul>
@@ -301,7 +458,7 @@ export default function AnalyticsPage() {
           <div className="text-center py-16">
             <div className="w-14 h-14 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-4">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-white/30">
-                <path d="M2 12l3.5-4 3 2.5 3-5.5 2.5 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <path d="M2 12l3.5-4 3 2.5 3-5.5 2.5 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <p className="font-medium text-white/50">No data yet.</p>

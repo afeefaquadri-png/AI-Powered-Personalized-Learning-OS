@@ -1,6 +1,9 @@
+import asyncio
 from collections.abc import AsyncGenerator
 
-from app.core.ai_client import claude_client
+import anthropic
+
+from app.core.ai_client import claude_client, openai_client
 
 # Board-specific teaching instructions and textbook references
 BOARD_TEACHING_CONTEXT: dict[str, str] = {
@@ -123,11 +126,32 @@ RESPONSE FORMATTING
 
     messages.append({"role": "user", "content": student_message})
 
-    async with claude_client.messages.stream(
-        model="claude-opus-4-6",
+    # Try Claude with retries, fall back to OpenAI GPT-4o on persistent overload
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            async with claude_client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+            return
+        except anthropic.OverloadedError:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)  # 1s, 2s
+
+    # Claude consistently overloaded — fall back to OpenAI GPT-4o
+    openai_messages = [{"role": "system", "content": system_prompt}] + messages
+    stream = await openai_client.chat.completions.create(
+        model="gpt-4o",
         max_tokens=2048,
-        system=system_prompt,
-        messages=messages,
-    ) as stream:
-        async for text in stream.text_stream:
+        messages=openai_messages,
+        stream=True,
+    )
+    async for chunk in stream:
+        text = chunk.choices[0].delta.content
+        if text:
             yield text

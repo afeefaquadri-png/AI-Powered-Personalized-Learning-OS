@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const WS_URL = API_URL.replace(/^http/, "ws");
 
 export interface SentimentData {
   emotion: string;
@@ -13,24 +13,18 @@ export function useSentiment() {
   const [currentSentiment, setCurrentSentiment] = useState<SentimentData | null>(null);
   const [history, setHistory] = useState<SentimentData[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
+
+  const wsRef = useRef<WebSocket | null>(null);
   const chapterIdRef = useRef<string | null>(null);
+  // Prevent sending a new frame before the previous analysis response arrives
+  const pendingRef = useRef(false);
 
-  const connect = useCallback((chapterId: string) => {
-    // Store chapter ID for frame submissions; nothing to "connect" for HTTP POST
+  const connect = useCallback(async (chapterId: string) => {
     chapterIdRef.current = chapterId;
-  }, []);
-
-  const disconnect = useCallback(() => {
-    chapterIdRef.current = null;
-    setCurrentSentiment(null);
-  }, []);
-
-  /** Send a base64-encoded JPEG frame for analysis via authenticated HTTP POST. */
-  const sendFrame = useCallback(async (frameBase64: string, chapterId: string) => {
-    if (analyzing) return; // skip if previous analysis is still running
-    setAnalyzing(true);
+    if (wsRef.current) return; // already connected
 
     try {
+      const { supabase } = await import("@/lib/supabase");
       let { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         const { data } = await supabase.auth.refreshSession();
@@ -38,32 +32,62 @@ export function useSentiment() {
       }
       if (!session?.access_token) return;
 
-      const res = await fetch(`${API_URL}/api/video/analyze`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          frame_base64: frameBase64,
-          // Only send chapter_id if it looks like a real UUID
-          chapter_id: /^[0-9a-f-]{36}$/i.test(chapterId) ? chapterId : null,
-        }),
-      });
+      const ws = new WebSocket(
+        `${WS_URL}/api/video/sentiment/ws?token=${encodeURIComponent(session.access_token)}`
+      );
+      wsRef.current = ws;
 
-      if (!res.ok) return;
+      ws.onmessage = (event) => {
+        pendingRef.current = false;
+        setAnalyzing(false);
+        try {
+          const data: SentimentData = JSON.parse(event.data as string);
+          if (data.emotion) {
+            setCurrentSentiment(data);
+            setHistory((prev) => [...prev.slice(-49), data]);
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
 
-      const data: SentimentData = await res.json();
-      if (data.emotion) {
-        setCurrentSentiment(data);
-        setHistory((prev) => [...prev.slice(-49), data]);
-      }
+      ws.onclose = () => {
+        wsRef.current = null;
+        pendingRef.current = false;
+        setAnalyzing(false);
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
     } catch {
-      // silently ignore — sentiment is non-critical
-    } finally {
-      setAnalyzing(false);
+      // Silently degrade — sentiment is non-critical
     }
-  }, [analyzing]);
+  }, []);
+
+  const disconnect = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    chapterIdRef.current = null;
+    pendingRef.current = false;
+    setCurrentSentiment(null);
+    setAnalyzing(false);
+  }, []);
+
+  /** Send a base64-encoded JPEG frame for live sentiment analysis. */
+  const sendFrame = useCallback((frameBase64: string, chapterId: string) => {
+    if (pendingRef.current) return; // skip — previous frame still being analyzed
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+    pendingRef.current = true;
+    setAnalyzing(true);
+    wsRef.current.send(
+      JSON.stringify({
+        frame_base64: frameBase64,
+        chapter_id: /^[0-9a-f-]{36}$/i.test(chapterId) ? chapterId : null,
+      })
+    );
+  }, []);
 
   return { currentSentiment, history, analyzing, connect, disconnect, sendFrame };
 }

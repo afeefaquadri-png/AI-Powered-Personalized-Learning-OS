@@ -152,6 +152,13 @@ export default function LessonPage({
                     updated[updated.length - 1] = { role: "tutor", content: tutorContent };
                     return updated;
                   });
+                } else if (parsed.error) {
+                  tutorContent = `Sorry, I couldn't respond: ${parsed.error}`;
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { role: "tutor", content: tutorContent };
+                    return updated;
+                  });
                 }
               } catch {}
             }
@@ -320,7 +327,7 @@ export default function LessonPage({
           {/* Voice tab */}
           {activeTab === "voice" && (
             <div className="flex-1 bg-white rounded-xl border p-6">
-              <VoiceChat chapterId={params.chapterId} />
+              <VoiceChat chapterId={params.chapterId} lessonTitle={lesson.title} />
             </div>
           )}
 

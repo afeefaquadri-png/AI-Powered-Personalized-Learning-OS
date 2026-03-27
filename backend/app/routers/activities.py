@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,8 +11,10 @@ from app.models.activity import Activity, ActivitySubmission
 from app.models.chapter import Chapter
 from app.models.progress import StudentProgress
 from app.models.student import Student
+from app.models.subject import Subject
 from app.schemas.activity import ActivityEvaluationResponse, ActivitySubmitRequest
 from app.services.activity_evaluator import evaluate_submission
+from app.services.curriculum_generator import adjust_curriculum_order
 
 router = APIRouter()
 
@@ -173,10 +176,87 @@ async def evaluate_activity(
 
     await db.commit()
 
+    # ── Adaptive curriculum adjustment ──────────────────────────────────────
+    # If the student scored below 60%, ask Claude to re-order the remaining
+    # chapters so that topics addressing their weak areas come up sooner.
+    score = evaluation.get("score", 0)
+    if score < 60 and chapter:
+        asyncio.create_task(
+            _adjust_curriculum_background(
+                subject_id=chapter.subject_id,
+                student_id=student_id,
+                db=db,
+            )
+        )
+
     return ActivityEvaluationResponse(
         activity_id=activity_id,
-        score=evaluation.get("score", 0),
+        score=score,
         correctness=evaluation.get("correctness", {}),
         feedback=evaluation.get("feedback", ""),
         guidance=evaluation.get("guidance", ""),
     )
+
+
+async def _adjust_curriculum_background(
+    subject_id: uuid.UUID,
+    student_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    """Fire-and-forget: re-order remaining chapters when a student scores below 60%."""
+    try:
+        from sqlalchemy import select as _select
+
+        # Remaining (non-completed) chapters
+        result = await db.execute(
+            _select(Chapter)
+            .where(Chapter.subject_id == subject_id, Chapter.status != "completed")
+            .order_by(Chapter.order_index)
+        )
+        remaining = result.scalars().all()
+        if len(remaining) <= 1:
+            return
+
+        # Completed chapters — needed to determine start_index
+        comp_result = await db.execute(
+            _select(Chapter)
+            .where(Chapter.subject_id == subject_id, Chapter.status == "completed")
+        )
+        completed = comp_result.scalars().all()
+        start_index = max((ch.order_index for ch in completed), default=0) + 1
+
+        # Student's weak topics and average score
+        prog_result = await db.execute(
+            _select(StudentProgress).where(
+                StudentProgress.student_id == student_id,
+                StudentProgress.subject_id == subject_id,
+            )
+        )
+        progress = prog_result.scalar_one_or_none()
+        weak_topics: list[str] = (progress.weaknesses or []) if progress else []
+        avg_score = (progress.average_score or 0) if progress else 0
+
+        if not weak_topics:
+            return  # Nothing to re-order without direction
+
+        chapters_payload = [
+            {"id": str(ch.id), "order_index": ch.order_index, "title": ch.title, "description": ch.description or ""}
+            for ch in remaining
+        ]
+
+        adjusted = await adjust_curriculum_order(
+            chapters=chapters_payload,
+            weak_topics=weak_topics,
+            recent_scores=[int(avg_score)],
+            start_index=start_index,
+        )
+
+        id_to_index = {item["id"]: item["order_index"] for item in adjusted.get("chapters", [])}
+        for ch in remaining:
+            new_idx = id_to_index.get(str(ch.id))
+            if new_idx is not None:
+                ch.order_index = new_idx
+
+        await db.commit()
+    except Exception:
+        pass  # Adjustment is best-effort; never block the main response

@@ -17,7 +17,6 @@ export default function FormulaRenderer({ latex, block = false }: FormulaRendere
       if (!ref.current) return;
       try {
         const katex = (await import("katex")).default;
-        await import("katex/dist/katex.min.css");
         if (!cancelled && ref.current) {
           katex.render(latex, ref.current, {
             displayMode: block,

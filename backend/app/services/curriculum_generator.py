@@ -105,7 +105,7 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
 }}"""
 
     message = await claude_client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-sonnet-4-6",
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -171,7 +171,7 @@ Guidelines:
 - summary: Concise but complete recap of the chapter."""
 
     message = await claude_client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-sonnet-4-6",
         max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -190,6 +190,67 @@ BOARD_ACTIVITY_GUIDELINES: dict[str, str] = {
     "IB": "Design inquiry-based questions that require analysis and evaluation. Include at least one extended-response question.",
     "Common Core": "Align questions to CCSS standards. Include multi-step problems requiring mathematical reasoning and real-world application.",
 }
+
+
+async def adjust_curriculum_order(
+    chapters: list[dict],
+    weak_topics: list[str],
+    recent_scores: list[int],
+    start_index: int = 1,
+) -> dict:
+    """Re-prioritise remaining (unlocked/available) chapters based on student performance.
+
+    Uses Claude to move chapters that address the student's weak areas earlier in the
+    sequence while keeping prerequisite order sensible.
+
+    Args:
+        chapters: List of {"id": str, "order_index": int, "title": str, "description": str}
+        weak_topics: Weaknesses from the student's progress record.
+        recent_scores: Last few activity scores (0-100).
+        start_index: The order_index to start re-numbering from.
+
+    Returns:
+        {"chapters": [{"id": ..., "order_index": ..., "title": ...}], "reasoning": str}
+    """
+    if not chapters:
+        return {"chapters": [], "reasoning": "No chapters to reorder."}
+
+    avg_score = sum(recent_scores) / len(recent_scores) if recent_scores else 0
+
+    prompt = f"""You are an expert K-12 curriculum designer personalising a student's learning path.
+
+Student performance summary:
+- Average score on completed chapters: {avg_score:.0f}%
+- Topics needing more work: {", ".join(weak_topics) if weak_topics else "none identified yet"}
+
+Remaining chapters to sequence (JSON):
+{json.dumps(chapters, indent=2)}
+
+Task: Re-order these chapters to best support this student:
+1. Move chapters that directly address the weak topics EARLIER so the student revisits fundamentals sooner.
+2. Keep prerequisite chapters before the chapters that depend on them.
+3. Maintain a logical learning progression overall.
+4. Do NOT add or remove chapters — only change order_index values.
+5. Re-number order_index starting from {start_index} with no gaps.
+
+Return ONLY valid JSON, no markdown:
+{{
+  "chapters": [
+    {{"id": "chapter-uuid-string", "order_index": {start_index}, "title": "chapter title"}}
+  ],
+  "reasoning": "One or two sentences explaining why you ordered them this way."
+}}"""
+
+    message = await claude_client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    content = message.content[0].text
+    start = content.find("{")
+    end = content.rfind("}") + 1
+    return json.loads(content[start:end])
 
 
 async def generate_activities(
@@ -251,7 +312,7 @@ Return ONLY valid JSON in this exact format (no markdown):
 Include 4-6 questions mixing multiple choice, short answer, and problem-solving types."""
 
     message = await claude_client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-sonnet-4-6",
         max_tokens=3000,
         messages=[{"role": "user", "content": prompt}],
     )

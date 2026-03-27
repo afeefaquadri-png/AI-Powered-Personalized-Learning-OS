@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -7,6 +8,13 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIASGIMiddleware
 
 from app.config import settings
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=0.2,
+        profiles_sample_rate=0.1,
+    )
 from app.core.rate_limiter import limiter
 from app.routers import (
     activities,
@@ -40,10 +48,11 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIASGIMiddleware)
 
+_is_dev = any("localhost" in o for o in settings.cors_origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=r"http://localhost:\d+",  # allow any localhost port in dev
+    allow_origin_regex=r"http://localhost:\d+" if _is_dev else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
