@@ -13,15 +13,17 @@ export default function AuthCallbackPage() {
     // when detectSessionInUrl is true (default for browser client).
     // We just need to wait for onAuthStateChange to fire.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        // New Google user → send to onboarding; returning user → dashboard
-        if (event === "SIGNED_IN") {
-          // Check if this is a brand-new user by checking created_at vs last_sign_in_at
-          const createdAt = new Date(session.user.created_at).getTime();
-          const lastSignIn = new Date(session.user.last_sign_in_at ?? session.user.created_at).getTime();
-          const isNewUser = Math.abs(lastSignIn - createdAt) < 5000; // within 5s → new
-          router.replace(isNewUser ? "/onboarding" : "/dashboard");
-        }
+      if (event === "PASSWORD_RECOVERY") {
+        // Password reset link — hand off to the reset page
+        router.replace("/auth/reset-password");
+        return;
+      }
+      if (session && event === "SIGNED_IN") {
+        // New Google user → onboarding; returning user → dashboard
+        const createdAt = new Date(session.user.created_at).getTime();
+        const lastSignIn = new Date(session.user.last_sign_in_at ?? session.user.created_at).getTime();
+        const isNewUser = Math.abs(lastSignIn - createdAt) < 5000;
+        router.replace(isNewUser ? "/onboarding" : "/dashboard");
       }
     });
 
