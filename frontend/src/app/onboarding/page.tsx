@@ -157,7 +157,7 @@ export default function OnboardingPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g. Alex"
                 />
               </div>
@@ -166,7 +166,7 @@ export default function OnboardingPage() {
                 <select
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select your grade</option>
                   {GRADE_OPTIONS.map((g) => (
@@ -257,7 +257,7 @@ export default function OnboardingPage() {
                   value={background}
                   onChange={(e) => setBackground(e.target.value)}
                   rows={3}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="e.g. I've studied basic algebra. I love football and cooking."
                 />
               </div>
@@ -269,7 +269,7 @@ export default function OnboardingPage() {
                   value={learningGoals}
                   onChange={(e) => setLearningGoals(e.target.value)}
                   rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="e.g. I want to ace my Physics exam this semester."
                 />
               </div>
