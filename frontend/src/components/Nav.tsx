@@ -21,11 +21,22 @@ const NAV_LINKS = [
   },
   {
     href: "/learn",
-    label: "Courses",
+    label: "Subjects",
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3z" stroke="currentColor" strokeWidth="1.4" fill="none" />
         <path d="M5 6h6M5 8.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    href: "/courses",
+    label: "Courses",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 2L1.5 5.5l6.5 3.5 6.5-3.5L8 2z" fill="currentColor" opacity="0.85" />
+        <path d="M1.5 9.5L8 13l6.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.6" />
+        <path d="M1.5 7L8 10.5 14.5 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.4" />
       </svg>
     ),
   },

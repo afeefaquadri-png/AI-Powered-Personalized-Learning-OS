@@ -256,6 +256,7 @@ export default function DashboardPage() {
             value={activeSubjects}
             label="Subjects"
             color="bg-blue-500/15"
+            href="/learn"
             icon={
               <svg className="text-blue-400" width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <rect x="2" y="2" width="7" height="7" rx="2" fill="currentColor" opacity="0.8" />
@@ -269,6 +270,7 @@ export default function DashboardPage() {
             value={totalChapters}
             label="Chapters Done"
             color="bg-violet-500/15"
+            scrollTo="progress"
             icon={
               <svg className="text-violet-400" width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M10 2L2 7l8 5 8-5-8-5z" fill="currentColor" opacity="0.8" />
@@ -280,6 +282,7 @@ export default function DashboardPage() {
             value={subjects.reduce((s, x) => s + x.total_chapters, 0)}
             label="Total Chapters"
             color="bg-cyan-500/15"
+            scrollTo="subjects"
             icon={
               <svg className="text-cyan-400" width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" stroke="currentColor" strokeWidth="1.5" fill="none" />
@@ -291,6 +294,7 @@ export default function DashboardPage() {
             value={avgScore !== null ? `${avgScore}%` : "—"}
             label="Average Score"
             color="bg-amber-500/15"
+            scrollTo="progress"
             icon={
               <svg className="text-amber-400" width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M4 14l3.5-4 3 2.5 3-5.5 2.5 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -301,7 +305,7 @@ export default function DashboardPage() {
 
         {/* ── Continue Learning ── */}
         {subjects.length > 0 && (
-          <section>
+          <section id="subjects">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-lg font-bold text-white">Continue Learning</h2>
@@ -330,7 +334,7 @@ export default function DashboardPage() {
 
         {/* ── Progress by subject ── */}
         {subjects.filter((s) => s.total_chapters > 0).length > 0 && (
-          <section>
+          <section id="progress">
             <h2 className="text-lg font-bold text-white mb-5">Progress Overview</h2>
             <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-6 space-y-5">
               {subjects.filter((s) => s.total_chapters > 0).map((s) => {

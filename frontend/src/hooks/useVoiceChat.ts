@@ -199,8 +199,11 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
           }
         }
 
-        // Tutor text transcript (streaming)
-        if (msg.type === "response.text.delta" && msg.delta) {
+        // Tutor transcript — audio responses use audio_transcript.delta, text-only use text.delta
+        if (
+          (msg.type === "response.audio_transcript.delta" || msg.type === "response.text.delta") &&
+          msg.delta
+        ) {
           setTranscript((prev) => {
             const last = prev[prev.length - 1];
             if (last?.startsWith("Tutor:")) {
@@ -286,7 +289,11 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
         };
 
         source.connect(processor);
-        // Do NOT connect processor to ctx.destination — that would route mic audio to speakers (echo)
+        // Connect to a silent gain node (volume=0) so onaudioprocess fires without echo
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0;
+        processor.connect(silentGain);
+        silentGain.connect(ctx.destination);
         setIsListening(true);
         setError(null);
       } catch {

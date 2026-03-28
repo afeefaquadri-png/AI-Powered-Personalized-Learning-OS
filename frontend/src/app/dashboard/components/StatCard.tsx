@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 interface StatCardProps {
@@ -5,11 +6,13 @@ interface StatCardProps {
   label: string;
   icon: React.ReactNode;
   color: string;
+  href?: string;
+  scrollTo?: string;
 }
 
-export default function StatCard({ value, label, icon, color }: StatCardProps) {
-  return (
-    <div className="bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5 flex items-center gap-4">
+export default function StatCard({ value, label, icon, color, href, scrollTo }: StatCardProps) {
+  const inner = (
+    <>
       <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", color)}>
         {icon}
       </div>
@@ -17,6 +20,30 @@ export default function StatCard({ value, label, icon, color }: StatCardProps) {
         <p className="text-2xl font-bold text-white leading-none">{value}</p>
         <p className="text-xs text-white/40 mt-1 font-medium">{label}</p>
       </div>
-    </div>
+    </>
   );
+
+  const base = "bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5 flex items-center gap-4";
+  const interactive = "cursor-pointer hover:border-white/[0.14] hover:bg-[#111c35] transition-colors";
+
+  if (href) {
+    return (
+      <Link href={href} className={cn(base, interactive)}>
+        {inner}
+      </Link>
+    );
+  }
+
+  if (scrollTo) {
+    return (
+      <button
+        onClick={() => document.getElementById(scrollTo)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+        className={cn(base, interactive, "w-full text-left")}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return <div className={cn(base)}>{inner}</div>;
 }
