@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -108,12 +109,33 @@ export default function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
-              <input
-                id="password" type="password" required value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl bg-white/[0.06] border border-white/[0.1] px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition"
-                placeholder="••••••••"
-              />
+              <div className="relative">
+                <input
+                  id="password" type={showPassword ? "text" : "password"} required value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-xl bg-white/[0.06] border border-white/[0.1] px-3 py-2.5 pr-10 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500/50 transition"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+                      <path d="M2 8.5s2.5-4.5 6.5-4.5 6.5 4.5 6.5 4.5-2.5 4.5-6.5 4.5S2 8.5 2 8.5z" stroke="currentColor" strokeWidth="1.3" fill="none" />
+                      <circle cx="8.5" cy="8.5" r="2" stroke="currentColor" strokeWidth="1.3" fill="none" />
+                      <path d="M2 2l13 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                  ) : (
+                    <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+                      <path d="M2 8.5s2.5-4.5 6.5-4.5 6.5 4.5 6.5 4.5-2.5 4.5-6.5 4.5S2 8.5 2 8.5z" stroke="currentColor" strokeWidth="1.3" fill="none" />
+                      <circle cx="8.5" cy="8.5" r="2" stroke="currentColor" strokeWidth="1.3" fill="none" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
             <button
               type="submit" disabled={loading || googleLoading}
