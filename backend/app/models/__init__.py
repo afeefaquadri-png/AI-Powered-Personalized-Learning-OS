@@ -5,6 +5,8 @@ from app.models.activity import Activity, ActivitySubmission
 from app.models.chat_message import ChatMessage
 from app.models.sentiment_log import SentimentLog
 from app.models.progress import StudentProgress
+from app.models.notes import StudentNote
+from app.models.syllabus import SyllabusBoard, SyllabusSubject, SyllabusChapter
 
 __all__ = [
     "Student",
@@ -15,4 +17,8 @@ __all__ = [
     "ChatMessage",
     "SentimentLog",
     "StudentProgress",
+    "StudentNote",
+    "SyllabusBoard",
+    "SyllabusSubject",
+    "SyllabusChapter",
 ]

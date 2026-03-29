@@ -1,0 +1,43 @@
+# Dependencies
+frontend/node_modules
+node_modules
+
+# Build outputs
+frontend/.next
+frontend/out
+frontend/.vercel
+
+# Python
+backend/__pycache__
+backend/**/__pycache__
+backend/**/*.pyc
+backend/.venv
+backend/venv
+backend/uploads
+*.egg-info
+.pytest_cache
+
+# Environment files — NEVER commit these
+.env
+.env.local
+.env.production
+.env.staging
+backend/.env
+frontend/.env.local
+frontend/.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+frontend/test-results
+frontend/playwright-report
+frontend/coverage
+
+# TypeScript
+frontend/tsconfig.tsbuildinfo

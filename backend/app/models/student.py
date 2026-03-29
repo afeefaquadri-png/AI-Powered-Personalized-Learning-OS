@@ -16,6 +16,7 @@ class Student(Base):
     grade: Mapped[str] = mapped_column(String(10))
     background: Mapped[str | None] = mapped_column(Text, nullable=True)
     interests: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
+    board: Mapped[str | None] = mapped_column(String(50), nullable=True)
     marksheet_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

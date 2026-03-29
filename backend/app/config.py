@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     api_port: int = 8000
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Sentry
+    sentry_dsn: str = ""
+
     # Sentiment
     sentiment_frame_interval_ms: int = 5000
     sentiment_confidence_threshold: float = 0.6

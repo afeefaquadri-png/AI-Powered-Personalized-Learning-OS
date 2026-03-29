@@ -11,7 +11,8 @@ class ChapterSummary(BaseModel):
 
 class CurriculumGenerateRequest(BaseModel):
     subject_name: str
-    grade: str
+    grade: str | None = None
+    board: str | None = None  # e.g. "CBSE", "ICSE", "Cambridge IGCSE", "IB", "Common Core"
     background: str | None = None
     difficulty_level: str = "beginner"
 
