@@ -38,4 +38,4 @@ ENV PYTHONPATH=/app
 
 # Run DB migrations then start the server
 # In production, prefer running migrations as a separate ECS one-off task
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
