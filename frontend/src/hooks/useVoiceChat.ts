@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_URL = "/api/proxy";
-const WS_URL = (process.env.NEXT_PUBLIC_API_URL || "http://learnos-alb-822082048.ap-south-1.elb.amazonaws.com").replace(/^http/, "ws");
+// OpenAI Realtime WSS endpoint — browser connects directly using ephemeral token
+const OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
 
 // Safely decode base64 to Uint8Array without spread-overflow risk
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -138,7 +139,28 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
     if (wsRef.current) return;
     setError(null);
 
-    const ws = new WebSocket(`${WS_URL}/api/voice/ws`);
+    // Get ephemeral token from backend (HTTP, goes through Next.js proxy)
+    let ephemeralToken: string;
+    try {
+      const { supabase } = await import("@/lib/supabase");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setError("Not authenticated."); return; }
+      const res = await fetch(`${API_URL}/api/voice/session`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error(`Session error: ${res.status}`);
+      const data = await res.json();
+      ephemeralToken = data.client_secret?.value ?? data.client_secret ?? data.token;
+      if (!ephemeralToken) throw new Error("No ephemeral token in response");
+    } catch (err) {
+      setError("Failed to start voice session. Please try again.");
+      console.error("[VoiceChat] Session error:", err);
+      return;
+    }
+
+    // Connect directly to OpenAI Realtime using ephemeral token (WSS — no mixed content)
+    const ws = new WebSocket(OPENAI_REALTIME_URL, ["realtime", `openai-insecure-api-key.${ephemeralToken}`, "openai-beta.realtime-v1"]);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
