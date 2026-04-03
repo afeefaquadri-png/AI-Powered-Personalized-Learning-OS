@@ -11,48 +11,89 @@ async def evaluate_submission(
     activity_prompt: dict,
     student_response: dict,
     student_grade: str,
+    chapter_content: dict | None = None,
 ) -> dict:
     """Evaluate a student's activity submission using Claude.
 
-    Returns correctness assessment, detailed feedback,
-    score (0-100), and guidance on what to revisit.
+    Returns correctness assessment, per-question feedback, chapter references,
+    score (0-100), and a specific study plan.
     """
-    prompt = f"""You are an expert K-12 evaluator. Carefully evaluate this student's activity submission.
+    key_concepts = ""
+    chapter_summary = ""
+    chapter_title = ""
+    if chapter_content:
+        key_concepts = ", ".join(chapter_content.get("key_concepts", []))
+        chapter_summary = chapter_content.get("summary", "")
+        chapter_title = chapter_content.get("title", "")
+
+    chapter_context = ""
+    if chapter_content:
+        chapter_context = f"""
+Chapter being tested: {chapter_title}
+Key concepts from this chapter: {key_concepts}
+Chapter summary: {chapter_summary}
+"""
+
+    prompt = f"""You are an expert K-12 evaluator. Carefully evaluate this student's quiz submission.
 
 Grade level: {student_grade}
-Activity type: {activity_prompt.get("type", "general")}
-
-Activity / Questions:
+{chapter_context}
+Quiz Questions:
 {json.dumps(activity_prompt, indent=2)}
 
-Student's Response:
+Student's Responses:
 {json.dumps(student_response, indent=2)}
 
-Evaluate the submission thoroughly and return ONLY valid JSON (no markdown, no explanation):
+Return ONLY valid JSON (no markdown):
 {{
   "score": 85,
   "correctness": {{
-    "overall": "partial",
+    "overall": "good",
     "details": {{
       "q1": "correct",
-      "q2": "incorrect - student confused X with Y",
-      "q3": "partial - correct approach but arithmetic error"
+      "q2": "incorrect",
+      "q3": "partial"
     }}
   }},
-  "feedback": "Detailed, encouraging 3-4 sentence feedback. Acknowledge what the student did well first, then address areas for improvement. Be specific about which concepts need review. Use grade-appropriate language.",
-  "guidance": "2-3 specific sentences guiding what to revisit. Reference the lesson material or key concepts. Suggest a specific way to practice or remember the concept.",
-  "strengths": ["Specific strength 1", "Specific strength 2"],
-  "areas_for_improvement": ["Specific area 1", "Specific area 2"]
+  "question_feedback": [
+    {{
+      "question_id": "q1",
+      "status": "correct",
+      "correct_answer": "The correct answer is...",
+      "explanation": "This is correct because...",
+      "student_answer_note": "You correctly identified..."
+    }},
+    {{
+      "question_id": "q2",
+      "status": "incorrect",
+      "correct_answer": "The correct answer is...",
+      "explanation": "The key concept here is...",
+      "student_answer_note": "You answered X, but the correct idea is Y because..."
+    }}
+  ],
+  "feedback": "2-3 encouraging sentences summarising overall performance.",
+  "guidance": "1-2 sentences on the most important thing to improve.",
+  "chapter_references": [
+    {{
+      "topic": "Exact concept name from the chapter",
+      "why": "You missed questions about this",
+      "what_to_do": "Re-read the section on X, focus on understanding Y"
+    }}
+  ],
+  "study_plan": [
+    "Step 1: Re-read the definition of [concept] and note the key distinctions",
+    "Step 2: Practise solving [type] problems by...",
+    "Step 3: Try explaining [concept] in your own words"
+  ],
+  "strengths": ["Strength 1", "Strength 2"],
+  "areas_for_improvement": ["Area 1", "Area 2"]
 }}
 
-Scoring guide:
-- 90-100: Excellent — all or nearly all correct, strong understanding demonstrated
-- 70-89: Good — mostly correct with minor errors or gaps
-- 50-69: Partial — some correct answers but significant conceptual gaps
-- 30-49: Needs improvement — fundamental misunderstandings present
-- 0-29: Requires re-study — major gaps, recommend reviewing the lesson
-
-IMPORTANT: Be encouraging regardless of the score. Frame feedback positively and constructively."""
+Rules:
+- question_feedback: one entry per question. status is "correct", "incorrect", or "partial". Always state the correct answer clearly.
+- chapter_references: only include topics the student got wrong or partially correct. Reference actual key concepts from the chapter. Empty array if all correct.
+- study_plan: 2-4 concrete, actionable steps referencing the chapter content. Skip if score >= 90.
+- Be encouraging. Acknowledge effort even for wrong answers."""
 
     content = ""
     try:

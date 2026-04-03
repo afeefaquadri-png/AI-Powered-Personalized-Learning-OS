@@ -25,11 +25,30 @@ interface ActivityData {
   };
 }
 
+interface QuestionFeedback {
+  question_id: string;
+  status: "correct" | "incorrect" | "partial";
+  correct_answer: string;
+  explanation: string;
+  student_answer_note: string;
+}
+
+interface ChapterReference {
+  topic: string;
+  why: string;
+  what_to_do: string;
+}
+
 interface EvaluationResult {
   score: number;
   correctness: { overall: string; details: Record<string, string> };
   feedback: string;
   guidance: string;
+  question_feedback: QuestionFeedback[];
+  chapter_references: ChapterReference[];
+  study_plan: string[];
+  strengths: string[];
+  areas_for_improvement: string[];
 }
 
 export default function ActivityPage({
@@ -177,35 +196,122 @@ export default function ActivityPage({
 
         {/* Evaluation results */}
         {phase === "evaluated" && evaluation && (
-          <div className="bg-white rounded-2xl border shadow-sm p-6 mb-6">
-            <div className="text-center mb-6">
-              <div className={`text-5xl font-bold ${scoreColor}`}>{evaluation.score}%</div>
-              <div className={`text-sm font-medium mt-1 capitalize ${scoreColor}`}>
+          <div className="space-y-5 mb-6">
+            {/* Score card */}
+            <div className="bg-white rounded-2xl border shadow-sm p-6 text-center">
+              <div className={`text-6xl font-bold ${scoreColor}`}>{evaluation.score}%</div>
+              <div className={`text-base font-semibold mt-1 capitalize ${scoreColor}`}>
                 {evaluation.correctness.overall}
               </div>
+              <p className="text-gray-600 text-sm mt-3 max-w-md mx-auto">{evaluation.feedback}</p>
+
+              {/* Strengths */}
+              {evaluation.strengths?.length > 0 && (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {evaluation.strengths.map((s, i) => (
+                    <span key={i} className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-3 py-1">
+                      ✓ {s}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="space-y-4">
-              <div className="bg-blue-50 rounded-xl p-4">
-                <h3 className="font-semibold text-blue-900 text-sm mb-1">Feedback</h3>
-                <p className="text-blue-800 text-sm">{evaluation.feedback}</p>
+            {/* Per-question breakdown */}
+            {evaluation.question_feedback?.length > 0 && (
+              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b bg-gray-50">
+                  <h3 className="font-semibold text-gray-800 text-sm">Question Breakdown</h3>
+                </div>
+                <div className="divide-y">
+                  {evaluation.question_feedback.map((qf, i) => (
+                    <div key={qf.question_id} className="px-5 py-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-bold ${
+                          qf.status === "correct" ? "bg-green-100 text-green-700" :
+                          qf.status === "partial" ? "bg-amber-100 text-amber-700" :
+                          "bg-red-100 text-red-700"
+                        }`}>
+                          {qf.status === "correct" ? "✓" : qf.status === "partial" ? "~" : "✗"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Q{i + 1}</span>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              qf.status === "correct" ? "bg-green-50 text-green-700" :
+                              qf.status === "partial" ? "bg-amber-50 text-amber-700" :
+                              "bg-red-50 text-red-700"
+                            }`}>
+                              {qf.status === "correct" ? "Correct" : qf.status === "partial" ? "Partial" : "Incorrect"}
+                            </span>
+                          </div>
+                          {qf.student_answer_note && (
+                            <p className="text-sm text-gray-600 mb-2">{qf.student_answer_note}</p>
+                          )}
+                          {qf.status !== "correct" && (
+                            <div className="bg-blue-50 rounded-lg px-3 py-2 text-sm text-blue-800">
+                              <span className="font-semibold">Correct answer: </span>{qf.correct_answer}
+                            </div>
+                          )}
+                          {qf.explanation && (
+                            <p className="text-xs text-gray-500 mt-2">{qf.explanation}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="bg-amber-50 rounded-xl p-4">
-                <h3 className="font-semibold text-amber-900 text-sm mb-1">What to review</h3>
-                <p className="text-amber-800 text-sm">{evaluation.guidance}</p>
-              </div>
-            </div>
+            )}
 
-            <div className="flex gap-3 mt-6">
+            {/* Chapter references — what to re-read */}
+            {evaluation.chapter_references?.length > 0 && (
+              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b bg-amber-50">
+                  <h3 className="font-semibold text-amber-900 text-sm">📖 What to Focus On in the Chapter</h3>
+                </div>
+                <div className="divide-y">
+                  {evaluation.chapter_references.map((ref, i) => (
+                    <div key={i} className="px-5 py-4">
+                      <p className="text-sm font-semibold text-gray-800 mb-0.5">{ref.topic}</p>
+                      <p className="text-xs text-gray-500 mb-2">{ref.why}</p>
+                      <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">{ref.what_to_do}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Study plan */}
+            {evaluation.study_plan?.length > 0 && (
+              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b bg-violet-50">
+                  <h3 className="font-semibold text-violet-900 text-sm">🎯 Your Study Plan</h3>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  {evaluation.study_plan.map((step, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <span className="w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                        {i + 1}
+                      </span>
+                      <p className="text-sm text-gray-700 leading-relaxed">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex gap-3">
               <Link
                 href={`/learn/${params.subjectId}/${params.chapterId}`}
-                className="flex-1 text-center border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
+                className="flex-1 text-center border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
               >
-                Review Lesson
+                ← Review Lesson
               </Link>
               <Link
                 href={`/learn/${params.subjectId}`}
-                className="flex-1 text-center bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                className="flex-1 text-center bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition"
               >
                 Next Chapter →
               </Link>

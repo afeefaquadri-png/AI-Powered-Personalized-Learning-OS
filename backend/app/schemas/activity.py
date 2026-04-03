@@ -11,3 +11,8 @@ class ActivityEvaluationResponse(BaseModel):
     correctness: dict
     feedback: str
     guidance: str
+    question_feedback: list = []
+    chapter_references: list = []
+    study_plan: list = []
+    strengths: list = []
+    areas_for_improvement: list = []

@@ -160,10 +160,16 @@ async def evaluate_activity(
 
     student = await db.get(Student, student_id)
 
+    # Fetch chapter content to give the evaluator lesson context
+    chapter_content: dict | None = None
+    if chapter := await db.get(Chapter, activity.chapter_id):
+        chapter_content = {**(chapter.content_json or {}), "title": chapter.title}
+
     evaluation = await evaluate_submission(
         activity_prompt=activity.prompt_json or {},
         student_response=submission.response_json or {},
         student_grade=student.grade if student else "8",
+        chapter_content=chapter_content,
     )
 
     # Persist the evaluation results
@@ -238,6 +244,11 @@ async def evaluate_activity(
         correctness=evaluation.get("correctness", {}),
         feedback=evaluation.get("feedback", ""),
         guidance=evaluation.get("guidance", ""),
+        question_feedback=evaluation.get("question_feedback", []),
+        chapter_references=evaluation.get("chapter_references", []),
+        study_plan=evaluation.get("study_plan", []),
+        strengths=evaluation.get("strengths", []),
+        areas_for_improvement=evaluation.get("areas_for_improvement", []),
     )
 
 
