@@ -1,6 +1,6 @@
 import json
 
-from app.core.ai_client import claude_client
+from app.core.ai_client import claude_client, openai_client
 
 
 async def analyze_frame(frame_base64: str) -> dict:
@@ -36,31 +36,49 @@ The "emotion" field MUST be exactly one of these values:
 The "confidence" must be a float between 0.0 and 1.0.
 If image quality is poor or face is not visible, return confidence below 0.4."""
 
-    message = await claude_client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=256,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": frame_base64,
+    # Try Claude Vision first, fall back to GPT-4o Vision on any error
+    try:
+        message = await claude_client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=256,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": frame_base64,
+                            },
                         },
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt,
-                    },
-                ],
-            }
-        ],
-    )
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+        )
+        content = message.content[0].text
+    except Exception:
+        # Fall back to GPT-4o Vision
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=256,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{frame_base64}"},
+                        },
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
+        )
+        content = response.choices[0].message.content or ""
 
-    content = message.content[0].text
     start = content.find("{")
     end = content.rfind("}") + 1
     json_str = content[start:end]
