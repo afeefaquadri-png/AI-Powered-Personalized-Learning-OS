@@ -49,7 +49,7 @@ export default function LessonPage({
 
   // Notes state
   const [notes, setNotes] = useState("");
-  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesSaveState, setNotesSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const notesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Chat state
@@ -112,35 +112,49 @@ export default function LessonPage({
 
     loadLesson();
     return () => { if (pollTimer) clearInterval(pollTimer); };
-
-    // Fetch notes (non-blocking)
-    apiGet<{ content: string }>(`/api/notes/${params.chapterId}`)
-      .then((d) => setNotes(d.content))
-      .catch(() => {});
   }, [user, authLoading, params.chapterId, router]);
+
+  // Load notes separately (independent of lesson polling)
+  useEffect(() => {
+    if (!user) return;
+    apiGet<{ content: string }>(`/api/notes/${params.chapterId}`, 0)
+      .then((d) => setNotes(d.content ?? ""))
+      .catch(() => {});
+  }, [user, params.chapterId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Auto-save notes with 500ms debounce
+  // Auto-save notes with 800ms debounce
   const saveNotes = useCallback(
     (content: string) => {
+      setNotesSaveState("saving");
       apiPut(`/api/notes/${params.chapterId}`, { content })
         .then(() => {
-          setNotesSaved(true);
-          setTimeout(() => setNotesSaved(false), 2000);
+          setNotesSaveState("saved");
+          setTimeout(() => setNotesSaveState("idle"), 2500);
         })
-        .catch(() => {});
+        .catch(() => setNotesSaveState("idle"));
     },
     [params.chapterId]
   );
 
   function handleNotesChange(value: string) {
     setNotes(value);
-    setNotesSaved(false);
+    setNotesSaveState("idle");
     if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
-    notesDebounceRef.current = setTimeout(() => saveNotes(value), 500);
+    notesDebounceRef.current = setTimeout(() => saveNotes(value), 800);
+  }
+
+  function downloadNotes() {
+    const blob = new Blob([notes], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${lesson?.title ?? "notes"}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function sendMessage() {
@@ -390,16 +404,41 @@ export default function LessonPage({
             <div className="flex-1 flex flex-col bg-white rounded-xl border overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2.5 border-b bg-gray-50">
                 <span className="text-sm font-medium text-gray-700">📝 My Notes</span>
-                {notesSaved && (
-                  <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                    <span>✓</span> Saved
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  {notesSaveState === "saving" && (
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Saving…
+                    </span>
+                  )}
+                  {notesSaveState === "saved" && (
+                    <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Saved
+                    </span>
+                  )}
+                  <button
+                    onClick={downloadNotes}
+                    disabled={!notes.trim()}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                    title="Download notes as .txt"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 2v8m0 0l-3-3m3 3l3-3M2 12h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Download
+                  </button>
+                </div>
               </div>
               <textarea
                 value={notes}
                 onChange={(e) => handleNotesChange(e.target.value)}
-                placeholder="Take notes here… they're auto-saved."
+                placeholder="Take notes here… they're auto-saved as you type."
                 className="flex-1 resize-none p-4 text-sm text-gray-800 font-mono leading-relaxed focus:outline-none focus:ring-0 border-0"
                 style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" }}
               />
