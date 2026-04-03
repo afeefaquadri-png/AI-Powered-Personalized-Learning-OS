@@ -25,15 +25,59 @@ async def get_chapter_activity(
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Get the activity for a chapter, including latest score if already evaluated."""
+    """Get the activity for a chapter. If none exists but content is ready, generates one."""
+    from fastapi.responses import JSONResponse
+    from app.models.student import Student
+    from app.models.subject import Subject
+    from app.services.curriculum_generator import generate_activities
+
     chapter_uuid = uuid.UUID(chapter_id)
+    student_id = uuid.UUID(user["sub"])
 
     result = await db.execute(
         select(Activity).where(Activity.chapter_id == chapter_uuid).limit(1)
     )
     activity = result.scalars().first()
+
     if not activity:
-        raise HTTPException(status_code=404, detail="No activity found for this chapter")
+        # Check if chapter has content — if so, generate activity in background
+        chapter = await db.get(Chapter, chapter_uuid)
+        if not chapter or not chapter.content_json:
+            raise HTTPException(status_code=404, detail="No activity found — open the lesson first to generate content")
+
+        # Trigger activity generation as a background asyncio task
+        async def _gen():
+            from app.core.database import async_session as _session
+            async with _session() as bg_db:
+                # Guard: another request may have already created one
+                existing = await bg_db.execute(
+                    select(Activity).where(Activity.chapter_id == chapter_uuid).limit(1)
+                )
+                if existing.scalars().first():
+                    return
+                try:
+                    student = await bg_db.get(Student, student_id)
+                    subject = await bg_db.get(Subject, chapter.subject_id)
+                    content = chapter.content_json or {}
+                    activity_data = await generate_activities(
+                        chapter_title=chapter.title,
+                        chapter_content={**content, "title": chapter.title},
+                        subject_name=subject.name if subject else "General",
+                        grade=student.grade if student else "8",
+                        board=student.board if student else None,
+                    )
+                    bg_db.add(Activity(
+                        chapter_id=chapter_uuid,
+                        type="quiz",
+                        prompt_json=activity_data,
+                        status="pending",
+                    ))
+                    await bg_db.commit()
+                except Exception:
+                    pass
+
+        asyncio.create_task(_gen())
+        return JSONResponse(status_code=202, content={"status": "generating"})
 
     # Include latest submission score when the activity has been evaluated
     latest_score = None

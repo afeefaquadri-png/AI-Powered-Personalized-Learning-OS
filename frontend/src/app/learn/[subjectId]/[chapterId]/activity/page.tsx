@@ -51,14 +51,43 @@ export default function ActivityPage({
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
 
-    apiGet<ActivityData>(`/api/activities/${params.chapterId}/activity`)
-      .then((data) => {
-        setActivity(data);
-        if (data.status === "evaluated") setPhase("evaluated");
-        else if (data.status === "submitted") setPhase("submitted");
-      })
-      .catch(() => setError("No activity found for this chapter yet. Complete the lesson first!"))
-      .finally(() => setLoading(false));
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    async function loadActivity() {
+      try {
+        const data = await apiGet<ActivityData & { status?: string }>(`/api/activities/${params.chapterId}/activity`, 0);
+        if (data.status === "generating") {
+          // Poll every 5s until quiz is ready
+          pollTimer = setInterval(async () => {
+            try {
+              const polled = await apiGet<ActivityData & { status?: string }>(`/api/activities/${params.chapterId}/activity`, 0);
+              if (polled.status !== "generating") {
+                clearInterval(pollTimer!); pollTimer = null;
+                setActivity(polled as ActivityData);
+                if (polled.status === "evaluated") setPhase("evaluated");
+                else if (polled.status === "submitted") setPhase("submitted");
+                setLoading(false);
+              }
+            } catch {
+              clearInterval(pollTimer!); pollTimer = null;
+              setError("Failed to generate quiz. Please go back and try again.");
+              setLoading(false);
+            }
+          }, 5000);
+        } else {
+          setActivity(data);
+          if (data.status === "evaluated") setPhase("evaluated");
+          else if (data.status === "submitted") setPhase("submitted");
+          setLoading(false);
+        }
+      } catch {
+        setError("No quiz available yet. Open the lesson first to generate content.");
+        setLoading(false);
+      }
+    }
+
+    loadActivity();
+    return () => { if (pollTimer) clearInterval(pollTimer); };
   }, [user, authLoading, params.chapterId, router]);
 
   function setResponse(questionId: string, value: string) {
@@ -98,8 +127,9 @@ export default function ActivityPage({
 
   if (authLoading || loading) {
     return (
-      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center">
+      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center flex-col gap-3">
         <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" />
+        <p className="text-sm text-gray-500">Generating your quiz…</p>
       </div>
     );
   }

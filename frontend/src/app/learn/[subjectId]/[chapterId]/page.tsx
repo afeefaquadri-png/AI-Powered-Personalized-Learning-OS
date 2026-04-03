@@ -312,14 +312,26 @@ export default function LessonPage({
 
           {/* Content tab */}
           {activeTab === "content" && (
-            <div className="flex-1 overflow-y-auto bg-white rounded-xl border p-6">
-              <LessonContent
-                contentHtml={lesson.content_html}
-                diagrams={lesson.diagrams}
-                formulas={lesson.formulas}
-                keyConcepts={lesson.key_concepts}
-                summary={lesson.summary}
-              />
+            <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-xl border">
+              <div className="flex-1 overflow-y-auto p-6">
+                <LessonContent
+                  contentHtml={lesson.content_html}
+                  diagrams={lesson.diagrams}
+                  formulas={lesson.formulas}
+                  keyConcepts={lesson.key_concepts}
+                  summary={lesson.summary}
+                />
+              </div>
+              {/* Mark complete + Take Quiz CTA at bottom of lesson */}
+              <div className="border-t px-6 py-4 bg-gray-50 flex items-center justify-between gap-4 flex-shrink-0">
+                <p className="text-sm text-gray-500">Done reading? Test your knowledge.</p>
+                <Link
+                  href={`/learn/${params.subjectId}/${params.chapterId}/activity`}
+                  className="inline-flex items-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-green-700 transition shadow-sm"
+                >
+                  Take Quiz →
+                </Link>
+              </div>
             </div>
           )}
 
