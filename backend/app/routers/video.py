@@ -31,7 +31,7 @@ async def analyze_frame_route(
     confidence = result.get("confidence", 0.5)
     action = determine_adaptive_action(emotion, confidence)
 
-    # Only persist when a valid chapter_id UUID is provided
+    # Parse chapter_id if provided (optional — logs are saved regardless)
     chapter_uuid: uuid.UUID | None = None
     if data.chapter_id:
         try:
@@ -39,16 +39,15 @@ async def analyze_frame_route(
         except ValueError:
             pass
 
-    if chapter_uuid:
-        log = SentimentLog(
-            student_id=student_id,
-            chapter_id=chapter_uuid,
-            emotion=emotion,
-            confidence=confidence,
-            action_taken=action,
-        )
-        db.add(log)
-        await db.commit()
+    log = SentimentLog(
+        student_id=student_id,
+        chapter_id=chapter_uuid,
+        emotion=emotion,
+        confidence=confidence,
+        action_taken=action,
+    )
+    db.add(log)
+    await db.commit()
 
     return SentimentResponse(emotion=emotion, confidence=confidence, action_taken=action)
 
