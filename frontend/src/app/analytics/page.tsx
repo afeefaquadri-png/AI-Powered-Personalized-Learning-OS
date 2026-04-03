@@ -88,6 +88,20 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [liveIndicator, setLiveIndicator] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function fetchSentiment() {
+    try {
+      const logs = await apiGet<SentimentEntry[]>("/api/video/sentiment/history?limit=200", 0);
+      setSentimentLogs(logs);
+    } catch { /* silent */ }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchSentiment();
+    setRefreshing(false);
+  }
 
   useEffect(() => {
     if (authLoading) return;
@@ -95,7 +109,7 @@ export default function AnalyticsPage() {
 
     Promise.allSettled([
       apiGet<ProgressResponse>(`/api/progress/${user.id}`, 20_000),
-      apiGet<SentimentEntry[]>("/api/video/sentiment/history?limit=200", 20_000),
+      apiGet<SentimentEntry[]>("/api/video/sentiment/history?limit=200", 0),
     ]).then(([progressResult, sentimentResult]) => {
       if (progressResult.status === "fulfilled") setSubjects(progressResult.value.subjects);
       else setError("Failed to load analytics. Please try again.");
@@ -120,10 +134,9 @@ export default function AnalyticsPage() {
             table: "sentiment_logs",
             filter: `student_id=eq.${user.id}`,
           },
-          (payload) => {
-            const newEntry = payload.new as SentimentEntry;
-            setSentimentLogs((prev) => [newEntry, ...prev].slice(0, 200));
-            // Flash live indicator
+          () => {
+            // Refetch full history so the list is always consistent
+            fetchSentiment();
             setLiveIndicator(true);
             setTimeout(() => setLiveIndicator(false), 2000);
           }
@@ -196,12 +209,25 @@ export default function AnalyticsPage() {
             <h1 className="text-2xl font-bold text-white tracking-tight">Analytics</h1>
             <p className="text-sm text-white/40 mt-1">Track your learning progress across all subjects.</p>
           </div>
-          {liveIndicator && (
-            <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-3 py-1.5 text-xs text-green-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              Live update
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {liveIndicator && (
+              <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-3 py-1.5 text-xs text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                Live update
+              </div>
+            )}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white/50 border border-white/10 hover:text-white/80 hover:border-white/20 hover:bg-white/[0.05] transition-all disabled:opacity-40"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={refreshing ? "animate-spin" : ""}>
+                <path d="M10 6A4 4 0 112 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M10 3v3h-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
         </div>
 
         {error && (
