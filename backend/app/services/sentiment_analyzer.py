@@ -9,32 +9,35 @@ async def analyze_frame(frame_base64: str) -> dict:
     Detects: engagement, confusion, boredom, frustration, happiness, drowsiness.
     Returns emotion label and confidence score.
     """
-    prompt = """Analyze this image of a student at their computer/desk and determine their current emotional/engagement state.
+    prompt = """Analyze this image of a student studying at their computer/desk.
 
-Look for visual cues:
-- Facial expression (smile, frown, neutral, yawning, squinting)
-- Eye state (wide open and focused, glazed/unfocused, half-closed, closed)
-- Posture (upright and leaning in = engaged; slouched, head drooping = bored/drowsy)
-- Brow (furrowed = confused/frustrated; relaxed = engaged/happy)
-- Overall body language and energy level
+IMPORTANT DEFAULTS:
+- A student looking at their screen with a neutral or calm face = "engaged". This is the most common state.
+- Do NOT classify neutral focus as "bored". Boredom requires clear active disengagement signals.
+- When in doubt, default to "engaged".
+
+Classify using ONLY these strict criteria:
+
+"engaged" — Eyes on screen, sitting upright or leaning forward, calm or attentive expression. Neutral face = engaged. This should be the most frequent label.
+
+"happy" — Visible smile, positive/excited expression, animated body language.
+
+"confused" — Furrowed brow, head tilted, squinting at screen, scratching head, uncertain look directed at the content.
+
+"frustrated" — Visible tension in face, frown, clenched jaw, hand pressed to face/forehead, visible irritation.
+
+"bored" — ONLY if: eyes clearly looking away from screen for extended time, slouched with head drooping, completely disengaged posture, or glazed unfocused eyes clearly not looking at content. A neutral attentive face is NOT bored.
+
+"drowsy" — Drooping/half-closed eyes, head nodding, yawning, clearly struggling to stay awake.
 
 Return ONLY valid JSON (no markdown):
 {
   "emotion": "engaged",
   "confidence": 0.85,
-  "notes": "Student appears focused with direct eye contact at screen"
+  "notes": "Student looking at screen with focused neutral expression"
 }
 
-The "emotion" field MUST be exactly one of these values:
-- "engaged" — actively focused and interested
-- "confused" — furrowed brow, tilted head, uncertain expression
-- "bored" — flat expression, looking away, slouched
-- "frustrated" — visible tension, frown, possibly hand on face
-- "happy" — smiling, energetic, positive body language
-- "drowsy" — drooping eyes, slouched, slow movements, yawning
-
-The "confidence" must be a float between 0.0 and 1.0.
-If image quality is poor or face is not visible, return confidence below 0.4."""
+The "confidence" must be a float 0.0–1.0. Return confidence < 0.4 if face is not clearly visible."""
 
     # Try Claude Vision first, fall back to GPT-4o Vision on any error
     try:
