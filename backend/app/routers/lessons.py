@@ -143,7 +143,10 @@ async def teaching_chat(
         subject = await db.get(Subject, chapter.subject_id)
 
         # Snapshot values needed for streaming (avoid holding session open)
-        chapter_content = chapter.content_json or {}
+        chapter_content = dict(chapter.content_json) if chapter.content_json else {}
+        # Always ensure title/description are present even if full content hasn't been generated yet
+        chapter_content.setdefault("title", chapter.title)
+        chapter_content.setdefault("description", chapter.description or "")
         student_grade = student.grade if student else "8"
         student_background = student.background if student else None
         student_board = student.board if student else None

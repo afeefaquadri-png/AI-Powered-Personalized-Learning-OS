@@ -76,7 +76,7 @@ async def stream_teaching_response(
     Adapts explanation depth based on student responses and curriculum framework.
     """
     key_concepts = ", ".join(chapter_content.get("key_concepts", []))
-    chapter_summary = chapter_content.get("summary", "")
+    chapter_summary = chapter_content.get("summary", "") or chapter_content.get("description", "")
     background_info = f"\nStudent background / interests: {student_background}" if student_background else ""
     subject_info = f"\nSubject: {subject_name}" if subject_name else ""
 
