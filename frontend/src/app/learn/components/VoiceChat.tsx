@@ -160,8 +160,11 @@ export default function VoiceChat({
               </div>
             ) : (
               transcript.map((line, i) => {
-                const isStudent =
-                  line.startsWith("You:") || line.startsWith("Student:");
+                const isStudent = line.startsWith("You:") || line.startsWith("Student:");
+                const displayText = line
+                  .replace(/^You:\s*/, "")
+                  .replace(/^Student:\s*/, "")
+                  .replace(/^Tutor:\s*/, "");
                 return (
                   <div
                     key={i}
@@ -174,7 +177,7 @@ export default function VoiceChat({
                           : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm"
                       }`}
                     >
-                      {line}
+                      {displayText}
                     </div>
                   </div>
                 );

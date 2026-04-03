@@ -81,6 +81,8 @@ export function useVoiceChat(options: UseVoiceChatOptions = {}) {
   const isAISpeakingRef = useRef(false);
   // When true, next tutor transcript delta must start a new line (don't append to cancelled partial)
   const newTutorLineRef = useRef(true);
+  // Index of the pending "You: ..." placeholder in transcript; -1 if none
+  const pendingStudentIndexRef = useRef(-1);
   // Keep options in a ref so callbacks don't go stale
   const optionsRef = useRef(options);
   useEffect(() => {
@@ -224,11 +226,17 @@ Teaching approach:
       try {
         const msg = JSON.parse(event.data as string);
 
-        // Student started speaking — interrupt AI if it's mid-response
+        // Student started speaking — interrupt AI if needed, add placeholder immediately
         if (msg.type === "input_audio_buffer.speech_started") {
           if (isAISpeakingRef.current) {
             cancelAIResponse();
           }
+          // Insert placeholder so student's turn appears in the right position
+          setTranscript((prev) => {
+            pendingStudentIndexRef.current = prev.length;
+            return [...prev, "You: …"];
+          });
+          newTutorLineRef.current = true; // next AI response starts a fresh line
         }
 
         // Accumulate PCM chunks as they arrive
@@ -249,10 +257,21 @@ Teaching approach:
           // setIsAISpeaking(false) is deferred until audio playback ends (in source.onended)
         }
 
-        // Student speech transcript
+        // Student speech transcript — replace the placeholder at the correct position
         if (msg.type === "conversation.item.input_audio_transcription.completed") {
-          if (msg.transcript?.trim()) {
-            appendTranscript(`You: ${msg.transcript.trim()}`);
+          const text = msg.transcript?.trim();
+          if (text) {
+            const idx = pendingStudentIndexRef.current;
+            pendingStudentIndexRef.current = -1;
+            setTranscript((prev) => {
+              if (idx >= 0 && idx < prev.length) {
+                const updated = [...prev];
+                updated[idx] = `You: ${text}`;
+                return updated;
+              }
+              // Fallback: append if placeholder index is gone
+              return [...prev, `You: ${text}`];
+            });
           }
         }
 
