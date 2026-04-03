@@ -1,6 +1,10 @@
 import json
 
+from openai import AsyncOpenAI
+
 from app.core.ai_client import claude_client
+
+_openai_client = AsyncOpenAI()
 
 
 async def evaluate_submission(
@@ -50,13 +54,23 @@ Scoring guide:
 
 IMPORTANT: Be encouraging regardless of the score. Frame feedback positively and constructively."""
 
-    message = await claude_client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=2048,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    content = ""
+    try:
+        message = await claude_client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=2048,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        content = message.content[0].text
+    except Exception:
+        # Fallback to GPT-4o if Claude is unavailable or overloaded
+        response = await _openai_client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=2048,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        content = response.choices[0].message.content or ""
 
-    content = message.content[0].text
     start = content.find("{")
     end = content.rfind("}") + 1
     json_str = content[start:end]

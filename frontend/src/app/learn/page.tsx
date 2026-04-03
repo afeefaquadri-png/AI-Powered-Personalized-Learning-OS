@@ -123,23 +123,42 @@ function CourseCard({ subject }: { subject: SubjectProgress }) {
     ? Math.round((subject.chapters_completed / subject.total_chapters) * 100)
     : 0;
 
+  const statusBadge = subject.total_chapters === 0 ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-white/30 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">Pending</span>
+  ) : pct === 100 ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Completed
+    </span>
+  ) : subject.chapters_completed > 0 ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />In Progress
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">
+      <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />Not Started
+    </span>
+  );
+
+  const ctaLabel = pct === 100 ? "Review" : pct > 0 ? "Continue Learning" : "Start Learning";
+
   return (
     <Link
       href={`/learn/${subject.subject_id}`}
-      className="group bg-[#0d1424] border border-white/[0.07] rounded-2xl overflow-hidden hover:border-white/[0.18] transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5 block"
+      className="group bg-[#0d1424] border border-white/[0.07] rounded-2xl overflow-hidden hover:border-white/[0.20] transition-all duration-300 hover:shadow-2xl hover:shadow-black/50 hover:-translate-y-1 block"
     >
       {/* Visual header */}
       <div className={cn("relative h-36 bg-gradient-to-br overflow-hidden", visual.bg)}>
-        <div className="absolute inset-0 p-4">
+        <div className="absolute inset-0 p-4 transition-transform duration-500 group-hover:scale-105">
           {visual.svg}
         </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
         <div className="absolute bottom-3 left-4">
           <span className={cn("text-xs font-semibold uppercase tracking-wider", visual.accent)}>
             {subject.subject_name}
           </span>
         </div>
         {subject.total_chapters > 0 && (
-          <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1 text-xs font-medium text-white/70">
+          <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1 text-xs font-bold text-white/80">
             {pct}%
           </div>
         )}
@@ -147,48 +166,41 @@ function CourseCard({ subject }: { subject: SubjectProgress }) {
 
       {/* Body */}
       <div className="p-4 space-y-3">
-        <div>
-          <h3 className="font-semibold text-white text-sm">{subject.subject_name}</h3>
-          <p className="text-xs text-white/40 mt-0.5">
-            {subject.total_chapters > 0
-              ? `${subject.chapters_completed} / ${subject.total_chapters} chapters`
-              : "No chapters yet"}
-          </p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-white text-sm">{subject.subject_name}</h3>
+            <p className="text-xs text-white/40 mt-0.5">
+              {subject.total_chapters > 0
+                ? `${subject.chapters_completed} / ${subject.total_chapters} chapters`
+                : "No chapters yet"}
+            </p>
+          </div>
+          {statusBadge}
         </div>
 
         {/* Progress bar */}
         {subject.total_chapters > 0 && (
-          <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-700"
+              className={cn(
+                "h-full rounded-full transition-all duration-700",
+                pct === 100 ? "bg-gradient-to-r from-emerald-500 to-emerald-400" : "bg-gradient-to-r from-blue-500 to-blue-400"
+              )}
               style={{ width: `${pct}%` }}
             />
           </div>
         )}
 
-        {/* Status badge */}
-        <div className="flex items-center justify-between">
-          {subject.total_chapters === 0 ? (
-            <span className="text-xs text-white/30 italic">Curriculum pending</span>
-          ) : pct === 100 ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Completed
-            </span>
-          ) : subject.chapters_completed > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              In progress
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-              Not started
-            </span>
-          )}
-          <span className="text-white/30 text-xs group-hover:text-white/60 transition-colors">
-            View →
-          </span>
+        {/* CTA */}
+        <div className={cn(
+          "w-full text-center text-xs font-semibold py-2 rounded-lg transition-all duration-200",
+          pct === 100
+            ? "bg-emerald-600/15 text-emerald-300 group-hover:bg-emerald-600/25"
+            : pct > 0
+            ? "bg-blue-600/90 text-white group-hover:bg-blue-500 shadow-lg shadow-blue-900/30"
+            : "bg-white/[0.06] text-white/60 group-hover:bg-white/[0.1] group-hover:text-white"
+        )}>
+          {ctaLabel} →
         </div>
       </div>
     </Link>
@@ -203,6 +215,7 @@ export default function CoursesPage() {
   const [subjects, setSubjects] = useState<SubjectProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "in_progress" | "completed" | "not_started">("all");
 
   useEffect(() => {
     if (authLoading) return;
@@ -254,16 +267,53 @@ export default function CoursesPage() {
     );
   }
 
+  const filtered = subjects.filter((s) => {
+    if (filter === "all") return true;
+    const pct = s.total_chapters > 0 ? (s.chapters_completed / s.total_chapters) * 100 : 0;
+    if (filter === "completed") return pct === 100;
+    if (filter === "in_progress") return pct > 0 && pct < 100;
+    if (filter === "not_started") return s.total_chapters === 0 || pct === 0;
+    return true;
+  });
+
+  const FILTERS: { key: typeof filter; label: string }[] = [
+    { key: "all", label: `All (${subjects.length})` },
+    { key: "in_progress", label: "In Progress" },
+    { key: "completed", label: "Completed" },
+    { key: "not_started", label: "Not Started" },
+  ];
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#080d1a]">
       <div className="max-w-7xl mx-auto px-6 py-10">
 
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white tracking-tight">My Courses</h1>
-          <p className="text-sm text-white/40 mt-1">
-            {subjects.length} subject{subjects.length !== 1 ? "s" : ""} enrolled
-          </p>
+        <div className="flex items-end justify-between mb-6 flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">My Subjects</h1>
+            <p className="text-sm text-white/40 mt-1">
+              {subjects.length} subject{subjects.length !== 1 ? "s" : ""} enrolled
+            </p>
+          </div>
+          {/* Filter pills */}
+          {subjects.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {FILTERS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all duration-200",
+                    filter === key
+                      ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-900/30 scale-105"
+                      : "text-white/50 border-white/10 hover:text-white/80 hover:border-white/20 hover:scale-[1.03] bg-white/[0.03]"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {subjects.length === 0 ? (
@@ -274,18 +324,22 @@ export default function CoursesPage() {
                 <path d="M8 10h8M8 14h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </div>
-            <p className="text-white/50 font-medium mb-1">No courses yet</p>
+            <p className="text-white/50 font-medium mb-1">No subjects yet</p>
             <p className="text-sm text-white/30 mb-6">Complete onboarding to get started</p>
-            <Link
-              href="/onboarding"
-              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-500 transition-colors"
-            >
+            <Link href="/onboarding" className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-500 transition-colors">
               Start Onboarding
             </Link>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-white/40 text-sm">No subjects match this filter.</p>
+            <button onClick={() => setFilter("all")} className="mt-3 text-blue-400 text-sm hover:text-blue-300">
+              Show all →
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {subjects.map((subject) => (
+            {filtered.map((subject) => (
               <CourseCard key={subject.subject_id} subject={subject} />
             ))}
           </div>

@@ -365,34 +365,86 @@ const LEVEL_COLORS: Record<string, string> = {
   Advanced: "text-red-400 bg-red-500/10 border-red-500/20",
 };
 
+const PROVIDER_RATINGS: Record<string, number> = {
+  "Khan Academy": 4.9,
+  "Coursera": 4.7,
+  "edX (MIT)": 4.8,
+  "edX (Harvard)": 4.9,
+  "MIT OpenCourseWare": 4.8,
+  "YouTube (3Blue1Brown)": 4.9,
+  "YouTube": 4.6,
+  "Caltech (Free)": 4.7,
+  "Coursera (UVA)": 4.5,
+  "Coursera (Michigan)": 4.7,
+  "Coursera (Stanford)": 4.9,
+  "Coursera (UCSD)": 4.8,
+  "Coursera (HSE)": 4.4,
+  "Coursera (Wesleyan)": 4.5,
+  "Coursera (ANU)": 4.5,
+  "Coursera (Virginia)": 4.6,
+  "Coursera (UPenn)": 4.6,
+};
+
+function StarRating({ rating }: { rating: number }) {
+  const full = Math.floor(rating);
+  const hasHalf = rating % 1 >= 0.5;
+  return (
+    <div className="flex items-center gap-1">
+      <div className="flex">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <svg key={i} width="10" height="10" viewBox="0 0 12 12" fill={i < full ? "#f59e0b" : i === full && hasHalf ? "url(#half)" : "none"} className="shrink-0">
+            <defs>
+              <linearGradient id="half" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="50%" stopColor="#f59e0b"/>
+                <stop offset="50%" stopColor="#374151"/>
+              </linearGradient>
+            </defs>
+            <path d="M6 1l1.39 2.82L10.5 4.27l-2.25 2.19.53 3.09L6 7.99 3.22 9.55l.53-3.09L1.5 4.27l3.11-.45L6 1z"
+              fill={i < full ? "#f59e0b" : i === full && hasHalf ? "#f59e0b" : "#374151"}
+              opacity={i >= full && !(i === full && hasHalf) ? 0.4 : 1}
+            />
+          </svg>
+        ))}
+      </div>
+      <span className="text-[10px] text-amber-400 font-semibold">{rating}</span>
+    </div>
+  );
+}
+
 function CourseCard({ course }: { course: ExternalCourse }) {
+  const rating = PROVIDER_RATINGS[course.provider] ?? 4.5;
+  const ctaLabel = course.duration === "Self-paced" ? "Start Free" : course.provider.startsWith("YouTube") ? "Watch Now" : "Open Course";
+
   return (
     <a
       href={course.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5 flex flex-col gap-3 hover:border-white/[0.18] hover:bg-[#111c35] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/40"
+      className="group bg-[#0d1424] border border-white/[0.07] rounded-2xl p-5 flex flex-col gap-3 hover:border-white/[0.20] hover:bg-[#111c35] transition-all duration-250 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/50"
     >
       {/* Top row */}
       <div className="flex items-start justify-between gap-3">
-        <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full border", course.providerColor)}>
+        <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full border truncate max-w-[70%]", course.providerColor)}>
           {course.provider}
         </span>
-        <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border", LEVEL_COLORS[course.level])}>
+        <span className={cn("text-[11px] font-medium px-2 py-0.5 rounded-full border shrink-0", LEVEL_COLORS[course.level])}>
           {course.level}
         </span>
       </div>
 
       {/* Title + description */}
       <div className="flex-1">
-        <h3 className="font-semibold text-white text-sm leading-snug mb-1.5 group-hover:text-blue-300 transition-colors">
+        <h3 className="font-semibold text-white text-sm leading-snug mb-1.5 group-hover:text-blue-300 transition-colors duration-200">
           {course.title}
         </h3>
-        <p className="text-xs text-white/40 leading-relaxed">{course.description}</p>
+        <p className="text-xs text-white/40 leading-relaxed line-clamp-2">{course.description}</p>
       </div>
 
+      {/* Rating */}
+      <StarRating rating={rating} />
+
       {/* Footer */}
-      <div className="flex items-center justify-between pt-1 border-t border-white/[0.05]">
+      <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
         <span className="text-xs text-white/30 flex items-center gap-1">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2" />
@@ -400,8 +452,8 @@ function CourseCard({ course }: { course: ExternalCourse }) {
           </svg>
           {course.duration}
         </span>
-        <span className="text-xs text-blue-400 group-hover:text-blue-300 flex items-center gap-1 transition-colors">
-          Open →
+        <span className="text-xs bg-blue-600/80 group-hover:bg-blue-500 text-white flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all duration-200 font-medium">
+          {ctaLabel} →
         </span>
       </div>
     </a>
@@ -494,10 +546,10 @@ export default function CoursesPage() {
                 key={tab}
                 onClick={() => setActiveSubject(tab)}
                 className={cn(
-                  "px-4 py-1.5 rounded-full text-sm font-medium border transition-all",
+                  "px-4 py-1.5 rounded-full text-sm font-medium border transition-all duration-200",
                   activeSubject === tab
-                    ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-900/30"
-                    : "text-white/50 border-white/10 hover:text-white/80 hover:border-white/20 bg-white/[0.03]"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-900/30 scale-105"
+                    : "text-white/50 border-white/10 hover:text-white/80 hover:border-white/25 hover:bg-white/[0.06] hover:scale-[1.03] bg-white/[0.03]"
                 )}
               >
                 {tab}

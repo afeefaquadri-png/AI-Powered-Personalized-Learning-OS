@@ -274,21 +274,40 @@ export default function TutorPage() {
         {/* Right: Chat panel */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#080d1a]">
           {!selectedChapterId ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center max-w-sm px-4">
-                <div className="w-16 h-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mx-auto mb-4">
-                  <svg width="28" height="28" viewBox="0 0 16 16" fill="none" className="text-blue-400">
-                    <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-                    <circle cx="5.5" cy="6.5" r="0.8" fill="currentColor" />
-                    <circle cx="8" cy="6.5" r="0.8" fill="currentColor" />
-                    <circle cx="10.5" cy="6.5" r="0.8" fill="currentColor" />
-                  </svg>
+            <div className="flex-1 flex items-center justify-center px-6">
+              <div className="text-center max-w-md">
+                {/* Glowing AI avatar */}
+                <div className="relative w-20 h-20 mx-auto mb-6">
+                  <div className="absolute inset-0 rounded-2xl bg-violet-500/20 blur-xl animate-pulse" />
+                  <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600/30 to-purple-600/30 border border-violet-500/30 flex items-center justify-center">
+                    <svg width="36" height="36" viewBox="0 0 16 16" fill="none" className="text-violet-400">
+                      <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                      <circle cx="5.5" cy="6.5" r="0.8" fill="currentColor" />
+                      <circle cx="8" cy="6.5" r="0.8" fill="currentColor" />
+                      <circle cx="10.5" cy="6.5" r="0.8" fill="currentColor" />
+                    </svg>
+                  </div>
                 </div>
-                <p className="font-semibold text-white text-base mb-2">AI Tutor</p>
-                <p className="text-sm text-white/40">
-                  Select a chapter from the sidebar to start a tutoring session.
-                  Ask any question — your AI tutor uses the Socratic method to guide you.
+
+                <h2 className="font-bold text-white text-xl mb-2">Your AI Tutor</h2>
+                <p className="text-sm text-white/40 leading-relaxed mb-6">
+                  Select a chapter from the sidebar to start. I use the Socratic method — I&apos;ll guide you to discover answers, not just give them.
                 </p>
+
+                {/* Suggestion chips */}
+                <div className="flex flex-wrap justify-center gap-2 mb-4">
+                  {[
+                    "Explain a concept simply",
+                    "Quiz me on this topic",
+                    "Give me a real-world example",
+                    "Help me solve a problem",
+                  ].map((s) => (
+                    <span key={s} className="text-xs text-violet-300 bg-violet-500/10 border border-violet-500/20 px-3 py-1.5 rounded-full">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-white/20">← Pick a chapter to unlock the chat</p>
               </div>
             </div>
           ) : (
@@ -296,17 +315,37 @@ export default function TutorPage() {
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {messages.length === 0 && (
-                  <div className="text-center py-12">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mx-auto mb-3">
-                      <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-blue-400">
-                        <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-                        <circle cx="5.5" cy="6.5" r="0.8" fill="currentColor" />
-                        <circle cx="8" cy="6.5" r="0.8" fill="currentColor" />
-                        <circle cx="10.5" cy="6.5" r="0.8" fill="currentColor" />
-                      </svg>
+                  <div className="flex flex-col items-center text-center py-8">
+                    <div className="relative w-14 h-14 mb-4">
+                      <div className="absolute inset-0 rounded-xl bg-violet-500/15 blur-lg animate-pulse" />
+                      <div className="relative w-14 h-14 rounded-xl bg-gradient-to-br from-violet-600/20 to-purple-600/20 border border-violet-500/25 flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 16 16" fill="none" className="text-violet-400">
+                          <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                          <circle cx="5.5" cy="6.5" r="0.8" fill="currentColor" />
+                          <circle cx="8" cy="6.5" r="0.8" fill="currentColor" />
+                          <circle cx="10.5" cy="6.5" r="0.8" fill="currentColor" />
+                        </svg>
+                      </div>
                     </div>
-                    <p className="font-medium text-white/60">Ready to help!</p>
-                    <p className="text-sm text-white/30 mt-1">Ask anything about <span className="text-white/50">{selectedChapterTitle}</span>.</p>
+                    <p className="font-semibold text-white mb-1">Ready to teach!</p>
+                    <p className="text-sm text-white/40 mb-5">Ask anything about <span className="text-white/60 font-medium">{selectedChapterTitle}</span></p>
+                    {/* Suggestion chips */}
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {[
+                        `Explain ${selectedChapterTitle} simply`,
+                        "Quiz me on this",
+                        "Give me an example",
+                        "What should I focus on?",
+                      ].map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => { setChatInput(suggestion); }}
+                          className="text-xs text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 hover:border-violet-500/40 px-3 py-1.5 rounded-full transition-all duration-200 hover:scale-[1.03]"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {messages.map((msg, i) => (

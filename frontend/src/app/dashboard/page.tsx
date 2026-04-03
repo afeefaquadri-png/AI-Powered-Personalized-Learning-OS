@@ -172,22 +172,33 @@ export default function DashboardPage() {
 
         {/* ── Hero ── */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0d1530] via-[#0f1a38] to-[#0a1020] border border-white/[0.07] p-8 md:p-10">
-          {/* Background glow */}
+          {/* Background glows */}
           <div className="absolute top-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
           <div className="absolute bottom-0 right-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 w-48 h-48 bg-indigo-600/5 rounded-full blur-2xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
 
           <div className="relative flex flex-col md:flex-row md:items-center gap-8">
             {/* Left content */}
             <div className="flex-1">
-              <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-3 py-1 mb-4">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                <span className="text-xs font-medium text-blue-400">Personalized Track</span>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-full px-3 py-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                  <span className="text-xs font-medium text-blue-400">Personalized Track</span>
+                </div>
+                {avgScore !== null && avgScore >= 70 && (
+                  <div className="inline-flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
+                    <span className="text-amber-400 text-xs">🔥</span>
+                    <span className="text-xs font-medium text-amber-400">On a roll!</span>
+                  </div>
+                )}
               </div>
 
               <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight mb-3">
-                {heroSubject
-                  ? "Continue your learning momentum"
-                  : `Welcome back${profile?.name ? `, ${profile.name}` : ""}!`}
+                {(() => {
+                  const hour = new Date().getHours();
+                  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+                  return profile?.name ? `${greeting}, ${profile.name}! 👋` : heroSubject ? "Continue your momentum" : "Welcome back!";
+                })()}
               </h1>
               <p className="text-white/50 text-sm md:text-base leading-relaxed mb-6 max-w-lg">
                 {heroSubject
@@ -200,21 +211,23 @@ export default function DashboardPage() {
                   <>
                     <Link
                       href={`/learn/${heroSubject.subject_id}`}
-                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-colors shadow-lg shadow-blue-900/40"
+                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all duration-200 shadow-lg shadow-blue-900/40 hover:shadow-blue-700/50 hover:-translate-y-0.5"
                     >
                       Resume Lesson
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </Link>
                     <Link
                       href="/tutor"
-                      className="inline-flex items-center gap-2 bg-white/[0.08] hover:bg-white/[0.12] border border-white/10 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-colors"
+                      className="inline-flex items-center gap-2 bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 font-medium text-sm px-5 py-2.5 rounded-xl transition-all duration-200 hover:-translate-y-0.5"
                     >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-violet-400"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" fill="none" /><circle cx="5.5" cy="6.5" r="0.8" fill="currentColor" /><circle cx="8" cy="6.5" r="0.8" fill="currentColor" /><circle cx="10.5" cy="6.5" r="0.8" fill="currentColor" /></svg>
                       Ask AI Tutor
                     </Link>
                   </>
                 ) : (
                   <Link
                     href="/tutor"
-                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-colors"
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all duration-200 hover:-translate-y-0.5"
                   >
                     Open AI Tutor
                   </Link>
@@ -225,28 +238,66 @@ export default function DashboardPage() {
             {/* Right panel — current focus */}
             {heroSubject && (
               <div className="md:w-64 shrink-0">
-                <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden">
+                <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden hover:border-white/[0.14] transition-all duration-300 group">
                   <div className={cn("h-32 bg-gradient-to-br relative overflow-hidden", getVisual(heroSubject.subject_name).bg)}>
                     <div className="absolute inset-0 p-3">
                       {getVisual(heroSubject.subject_name).svg}
                     </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
                   </div>
                   <div className="p-4">
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30 mb-1">Current Focus</p>
                     <p className="text-sm font-semibold text-white">{heroSubject.subject_name}</p>
-                    <div className="mt-2 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                    <div className="mt-2.5 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-500 rounded-full"
+                        className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-700"
                         style={{ width: `${Math.round((heroSubject.chapters_completed / heroSubject.total_chapters) * 100)}%` }}
                       />
                     </div>
-                    <p className="text-[11px] text-white/30 mt-1.5">
-                      {heroSubject.chapters_completed}/{heroSubject.total_chapters} chapters
-                    </p>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-[11px] text-white/30">
+                        {heroSubject.chapters_completed}/{heroSubject.total_chapters} chapters
+                      </p>
+                      <p className="text-[11px] font-semibold text-blue-400">
+                        {Math.round((heroSubject.chapters_completed / heroSubject.total_chapters) * 100)}%
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* ── AI Recommendations banner ── */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-950/60 via-purple-950/60 to-indigo-950/60 border border-violet-500/20 p-5">
+          <div className="absolute inset-0 bg-gradient-to-r from-violet-600/5 to-indigo-600/5 pointer-events-none" />
+          <div className="relative flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
+              <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-violet-400">
+                <path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                <circle cx="5.5" cy="6.5" r="0.8" fill="currentColor" />
+                <circle cx="8" cy="6.5" r="0.8" fill="currentColor" />
+                <circle cx="10.5" cy="6.5" r="0.8" fill="currentColor" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">AI Tutor is ready for you</p>
+              <p className="text-xs text-white/40 mt-0.5 truncate">
+                {heroSubject
+                  ? `Ask questions about ${heroSubject.subject_name}, get explanations, or request a quiz`
+                  : "Start a conversation, explore any topic, or ask for study tips"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Link
+                href="/tutor"
+                className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 shadow-lg shadow-violet-900/40"
+              >
+                Chat now
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </Link>
+            </div>
           </div>
         </div>
 
