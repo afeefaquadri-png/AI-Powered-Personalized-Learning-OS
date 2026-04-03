@@ -30,10 +30,14 @@ export default function VideoFeed({ chapterId }: VideoFeedProps) {
   useEffect(() => {
     connect(chapterId);
     return () => {
+      stopCamera();
       disconnect();
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  }, [chapterId, connect, disconnect]);
+  }, [chapterId, connect, disconnect, stopCamera]);
 
   async function handleToggleCamera() {
     if (isActive) {
