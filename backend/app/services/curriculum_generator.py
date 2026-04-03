@@ -120,6 +120,19 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
     return data
 
 
+def _parse_content_json(raw: str) -> dict:
+    """Extract and parse JSON from AI response, stripping any markdown fences."""
+    # Strip markdown code fences if present
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        if text.endswith("```"):
+            text = text.rsplit("```", 1)[0]
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    return json.loads(text[start:end])
+
+
 async def generate_chapter_content(
     chapter_title: str,
     chapter_description: str,
@@ -132,7 +145,10 @@ async def generate_chapter_content(
 
     Returns content with explanatory text, diagrams (Mermaid.js),
     formulas (LaTeX), key concepts, and summary.
+    Falls back to GPT-4o if Claude is unavailable.
     """
+    from app.core.ai_client import openai_client
+
     background_info = f"\nStudent background: {student_background}" if student_background else ""
     board_guidelines = BOARD_CONTENT_GUIDELINES.get(board or "", "")
     board_section = f"\n\n{board_guidelines}" if board_guidelines else (f"\nBoard / curriculum framework: {board}" if board else "")
@@ -170,17 +186,29 @@ Guidelines:
 - key_concepts: 4-6 key concepts students MUST understand to master this chapter.
 - summary: Concise but complete recap of the chapter."""
 
-    message = await claude_client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=8192,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    # Try Claude first, fall back to GPT-4o on any error
+    raw = ""
+    try:
+        message = await claude_client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=8192,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text
+        return _parse_content_json(raw)
+    except Exception:
+        pass  # Fall through to GPT-4o
 
-    content = message.content[0].text
-    start = content.find("{")
-    end = content.rfind("}") + 1
-    json_str = content[start:end]
-    return json.loads(json_str)
+    response = await openai_client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=8192,
+        messages=[
+            {"role": "system", "content": "You are an expert K-12 educator. Always respond with valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    raw = response.choices[0].message.content or ""
+    return _parse_content_json(raw)
 
 
 BOARD_ACTIVITY_GUIDELINES: dict[str, str] = {
