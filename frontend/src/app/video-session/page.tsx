@@ -68,6 +68,64 @@ function youtubeSearchUrl(query: string) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 }
 
+// ─── Video sidebar component (shared between mobile overlay and desktop) ──────
+
+function VideoSidebarContent({
+  loadingSubjects,
+  subjects,
+  selectedChapter,
+  onSelect,
+}: {
+  loadingSubjects: boolean;
+  subjects: SubjectWithChapters[];
+  selectedChapter: Chapter | null;
+  onSelect: (sub: SubjectWithChapters, ch: Chapter) => void;
+}) {
+  return (
+    <>
+      <div className="px-4 py-3 border-b border-white/[0.06]">
+        <p className="text-xs font-semibold text-white/30 uppercase tracking-wider">Your Subjects</p>
+      </div>
+      {loadingSubjects ? (
+        <div className="flex items-center justify-center py-10">
+          <div className="w-5 h-5 rounded-full border-2 border-blue-900 border-t-blue-500 animate-spin" />
+        </div>
+      ) : subjects.length === 0 ? (
+        <div className="px-4 py-8 text-center">
+          <p className="text-sm text-white/40 mb-2">No subjects found.</p>
+          <Link href="/dashboard" className="text-xs text-blue-400 hover:text-blue-300">Go to Dashboard →</Link>
+        </div>
+      ) : (
+        <div className="py-2">
+          {subjects.map((sub) => (
+            <div key={sub.subject_id}>
+              <div className="px-4 py-2 flex items-center gap-2">
+                <span className="text-sm">{SUBJECT_EMOJIS[sub.subject_name] ?? "📚"}</span>
+                <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">{sub.subject_name}</span>
+              </div>
+              {sub.chapters.map((ch) => (
+                <button
+                  key={ch.id}
+                  onClick={() => onSelect(sub, ch)}
+                  className={cn(
+                    "w-full text-left px-4 py-2 text-xs transition-all",
+                    selectedChapter?.id === ch.id
+                      ? "bg-blue-600/20 text-blue-300 border-r-2 border-blue-500"
+                      : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
+                  )}
+                >
+                  <span className="text-white/20 mr-1.5">{ch.order_index}.</span>
+                  {ch.title}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function VideoSessionPage() {
@@ -78,6 +136,7 @@ export default function VideoSessionPage() {
   const [subjects, setSubjects] = useState<SubjectWithChapters[]>([]);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Selected chapter for video cards
   const [selectedSubject, setSelectedSubject] = useState<SubjectWithChapters | null>(null);
@@ -199,65 +258,50 @@ export default function VideoSessionPage() {
 
       {/* ── Course Videos tab ── */}
       {tab === "videos" && (
-        <div className="flex flex-1 overflow-hidden min-h-0">
+        <div className="flex flex-1 overflow-hidden min-h-0 relative">
 
-          {/* Sidebar: subjects → chapters */}
-          <div className="w-64 flex-shrink-0 border-r border-white/[0.06] overflow-y-auto flex flex-col">
-            <div className="px-4 py-3 border-b border-white/[0.06]">
-              <p className="text-xs font-semibold text-white/30 uppercase tracking-wider">Your Subjects</p>
+          {/* Mobile sidebar toggle bar */}
+          {tab === "videos" && (
+            <button
+              onClick={() => setSidebarOpen((o) => !o)}
+              className="md:hidden absolute top-3 left-3 z-10 flex items-center gap-1.5 text-xs text-white/60 hover:text-white bg-[#0d1424] border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg transition-all"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 4h10M2 7h7M2 10h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+              {selectedChapter ? selectedChapter.title.slice(0, 18) + (selectedChapter.title.length > 18 ? "…" : "") : "Pick Chapter"}
+            </button>
+          )}
+
+          {/* Mobile sidebar overlay */}
+          {sidebarOpen && (
+            <div className="md:hidden fixed inset-0 z-20 top-[calc(64px+48px)]">
+              <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
+              <div className="absolute left-0 top-0 bottom-0 w-64 bg-[#080d1a] border-r border-white/[0.06] overflow-y-auto flex flex-col animate-in slide-in-from-left duration-200">
+                <VideoSidebarContent
+                  loadingSubjects={loadingSubjects}
+                  subjects={subjects}
+                  selectedChapter={selectedChapter}
+                  onSelect={(sub, ch) => { setSelectedSubject(sub); setSelectedChapter(ch); setSidebarOpen(false); }}
+                />
+              </div>
             </div>
+          )}
 
-            {loadingSubjects ? (
-              <div className="flex items-center justify-center py-10">
-                <div className="w-5 h-5 rounded-full border-2 border-blue-900 border-t-blue-500 animate-spin" />
-              </div>
-            ) : subjects.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <p className="text-sm text-white/40 mb-2">No subjects found.</p>
-                <Link href="/dashboard" className="text-xs text-blue-400 hover:text-blue-300">
-                  Go to Dashboard →
-                </Link>
-              </div>
-            ) : (
-              <div className="py-2">
-                {subjects.map((sub) => (
-                  <div key={sub.subject_id}>
-                    {/* Subject header */}
-                    <div className="px-4 py-2 flex items-center gap-2">
-                      <span className="text-sm">{SUBJECT_EMOJIS[sub.subject_name] ?? "📚"}</span>
-                      <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">
-                        {sub.subject_name}
-                      </span>
-                    </div>
-                    {/* Chapter list */}
-                    {sub.chapters.map((ch) => {
-                      const isSelected = selectedChapter?.id === ch.id;
-                      return (
-                        <button
-                          key={ch.id}
-                          onClick={() => { setSelectedSubject(sub); setSelectedChapter(ch); }}
-                          className={cn(
-                            "w-full text-left px-4 py-2 text-xs transition-all",
-                            isSelected
-                              ? "bg-blue-600/20 text-blue-300 border-r-2 border-blue-500"
-                              : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
-                          )}
-                        >
-                          <span className="text-white/20 mr-1.5">{ch.order_index}.</span>
-                          {ch.title}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* Sidebar: subjects → chapters — desktop only */}
+          <div className="hidden md:flex w-64 flex-shrink-0 border-r border-white/[0.06] overflow-y-auto flex-col">
+            <VideoSidebarContent
+              loadingSubjects={loadingSubjects}
+              subjects={subjects}
+              selectedChapter={selectedChapter}
+              onSelect={(sub, ch) => { setSelectedSubject(sub); setSelectedChapter(ch); }}
+            />
           </div>
 
           {/* Main: video embed */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {!selectedChapter || !baseQuery ? (
-              <div className="flex-1 flex items-center justify-center">
+              <div className="flex-1 flex items-center justify-center pt-14 md:pt-0">
                 <div className="text-center">
                   <div className="w-14 h-14 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
                     <svg width="22" height="22" viewBox="0 0 16 16" fill="none" className="text-white/30">

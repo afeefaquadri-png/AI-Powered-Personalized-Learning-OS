@@ -34,6 +34,62 @@ interface SubjectWithChapters {
   chapters: Chapter[];
 }
 
+function SidebarContent({
+  loadingSubjects,
+  subjects,
+  selectedChapterId,
+  selectChapter,
+}: {
+  loadingSubjects: boolean;
+  subjects: SubjectWithChapters[];
+  selectedChapterId: string | null;
+  selectChapter: (subjectId: string, chapter: Chapter) => void;
+}) {
+  return (
+    <>
+      <div className="px-4 py-4 border-b border-white/[0.06]">
+        <p className="text-xs font-semibold text-white/30 uppercase tracking-wider">Select a Chapter</p>
+      </div>
+      {loadingSubjects ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-6 h-6 rounded-full border-2 border-blue-900 border-t-blue-500 animate-spin" />
+        </div>
+      ) : subjects.length === 0 ? (
+        <div className="px-4 py-8 text-center">
+          <p className="text-sm text-white/40 mb-3">No chapters available yet.</p>
+          <Link href="/dashboard" className="text-xs text-blue-400 hover:text-blue-300">Generate a curriculum first →</Link>
+        </div>
+      ) : (
+        <div className="flex-1 py-2">
+          {subjects.map((sub) => (
+            <div key={sub.subject_id}>
+              <div className="px-4 py-2.5 flex items-center gap-2">
+                <span className="text-base">{SUBJECT_EMOJIS[sub.subject_name] ?? "📚"}</span>
+                <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">{sub.subject_name}</span>
+              </div>
+              {sub.chapters.map((chapter) => (
+                <button
+                  key={chapter.id}
+                  onClick={() => selectChapter(sub.subject_id, chapter)}
+                  className={cn(
+                    "w-full text-left px-4 py-2.5 text-sm transition-all",
+                    selectedChapterId === chapter.id
+                      ? "bg-blue-600/20 text-blue-300 border-r-2 border-blue-500"
+                      : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
+                  )}
+                >
+                  <span className="text-white/20 mr-2 text-xs">{chapter.order_index}.</span>
+                  {chapter.title}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function TutorPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useSupabaseAuth();
@@ -47,6 +103,7 @@ export default function TutorPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatStreaming, setChatStreaming] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,6 +158,7 @@ export default function TutorPage() {
     setSelectedChapterTitle(chapter.title);
     setMessages([]);
     setChatInput("");
+    setSidebarOpen(false);
   }
 
   async function sendMessage() {
@@ -204,71 +262,49 @@ export default function TutorPage() {
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 16 16">
             <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Dashboard
+          <span className="hidden sm:inline">Dashboard</span>
         </Link>
         <span className="text-white/[0.12]">|</span>
         <h1 className="font-semibold text-white text-sm">AI Tutor</h1>
         {selectedChapterTitle && (
-          <>
-            <span className="text-white/[0.12]">|</span>
-            <span className="text-white/50 text-sm truncate max-w-xs">{selectedChapterTitle}</span>
-          </>
+          <span className="text-white/50 text-sm truncate max-w-[120px] sm:max-w-xs">{selectedChapterTitle}</span>
         )}
+        {/* Mobile: chapter picker button */}
+        <button
+          onClick={() => setSidebarOpen((o) => !o)}
+          className="md:hidden ml-auto flex items-center gap-1.5 text-xs text-white/60 hover:text-white border border-white/10 hover:border-white/20 px-2.5 py-1.5 rounded-lg transition-all"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 4h10M2 7h7M2 10h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          {selectedChapterTitle ? "Change" : "Pick Chapter"}
+        </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden min-h-0">
-        {/* Left sidebar */}
-        <div className="w-72 flex-shrink-0 bg-[#080d1a] border-r border-white/[0.06] overflow-y-auto flex flex-col">
-          <div className="px-4 py-4 border-b border-white/[0.06]">
-            <p className="text-xs font-semibold text-white/30 uppercase tracking-wider">Select a Chapter</p>
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="md:hidden fixed inset-0 z-20 top-[calc(64px+49px)]">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
+          <div className="absolute left-0 top-0 bottom-0 w-72 bg-[#080d1a] border-r border-white/[0.06] overflow-y-auto flex flex-col animate-in slide-in-from-left duration-200">
+            <SidebarContent
+              loadingSubjects={loadingSubjects}
+              subjects={subjects}
+              selectedChapterId={selectedChapterId}
+              selectChapter={selectChapter}
+            />
           </div>
+        </div>
+      )}
 
-          {loadingSubjects ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 rounded-full border-2 border-blue-900 border-t-blue-500 animate-spin" />
-            </div>
-          ) : subjects.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-white/[0.05] flex items-center justify-center mx-auto mb-3">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-white/30">
-                  <path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6z" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  <path d="M8 10h8M8 14h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </div>
-              <p className="text-sm text-white/40 mb-3">No chapters available yet.</p>
-              <Link href="/dashboard" className="text-xs text-blue-400 hover:text-blue-300">
-                Generate a curriculum first →
-              </Link>
-            </div>
-          ) : (
-            <div className="flex-1 py-2">
-              {subjects.map((sub) => (
-                <div key={sub.subject_id}>
-                  <div className="px-4 py-2.5 flex items-center gap-2">
-                    <span className="text-base">{SUBJECT_EMOJIS[sub.subject_name] ?? "📚"}</span>
-                    <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">
-                      {sub.subject_name}
-                    </span>
-                  </div>
-                  {sub.chapters.map((chapter) => (
-                    <button
-                      key={chapter.id}
-                      onClick={() => selectChapter(sub.subject_id, chapter)}
-                      className={cn(
-                        "w-full text-left px-4 py-2.5 text-sm transition-all",
-                        selectedChapterId === chapter.id
-                          ? "bg-blue-600/20 text-blue-300 border-r-2 border-blue-500"
-                          : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
-                      )}
-                    >
-                      <span className="text-white/20 mr-2 text-xs">{chapter.order_index}.</span>
-                      {chapter.title}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
+      <div className="flex flex-1 overflow-hidden min-h-0">
+        {/* Left sidebar — desktop only */}
+        <div className="hidden md:flex w-72 flex-shrink-0 bg-[#080d1a] border-r border-white/[0.06] overflow-y-auto flex-col">
+          <SidebarContent
+            loadingSubjects={loadingSubjects}
+            subjects={subjects}
+            selectedChapterId={selectedChapterId}
+            selectChapter={selectChapter}
+          />
         </div>
 
         {/* Right: Chat panel */}
