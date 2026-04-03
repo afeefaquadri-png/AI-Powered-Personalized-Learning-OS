@@ -24,6 +24,7 @@ interface CurriculumResponse {
 }
 
 interface ChapterContent {
+  status?: string;
   content_html: string;
   diagrams: string[];
   formulas: string[];
@@ -57,29 +58,55 @@ function ChapterRow({
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState(false);
   const loadedRef = useRef(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const cfg = STATUS[chapter.status];
 
-  // Lazy-load content on first open — only once per mount
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  // Lazy-load content on first open — polls every 6s if backend is still generating
   const loadContent = useCallback(async () => {
     if (loadedRef.current) return;
     loadedRef.current = true;
     setContentLoading(true);
     setContentError(false);
     try {
-      const data = await apiGet<ChapterContent>(`/api/lessons/${chapter.id}/content`);
-      setContent(data);
+      const data = await apiGet<ChapterContent>(`/api/lessons/${chapter.id}/content`, 0);
+      if (data.status === "generating") {
+        // Backend is generating — poll every 6 seconds
+        pollRef.current = setInterval(async () => {
+          try {
+            const polled = await apiGet<ChapterContent>(`/api/lessons/${chapter.id}/content`, 0);
+            if (polled.status !== "generating") {
+              stopPolling();
+              setContent(polled);
+              setContentLoading(false);
+            }
+          } catch {
+            stopPolling();
+            setContentError(true);
+            setContentLoading(false);
+            loadedRef.current = false;
+          }
+        }, 6000);
+      } else {
+        setContent(data);
+        setContentLoading(false);
+      }
     } catch {
       setContentError(true);
-      loadedRef.current = false; // allow manual retry
-    } finally {
       setContentLoading(false);
+      loadedRef.current = false;
     }
-  }, [chapter.id]);
+  }, [chapter.id, stopPolling]);
 
   useEffect(() => {
     if (isOpen) loadContent();
-  }, [isOpen, loadContent]);
+    if (!isOpen) stopPolling();
+    return () => stopPolling();
+  }, [isOpen, loadContent, stopPolling]);
 
   return (
     <div className={cn(

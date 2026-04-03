@@ -12,6 +12,7 @@ import SentimentIndicator from "@/components/SentimentIndicator";
 import { useSentiment, type SentimentData } from "@/hooks/useSentiment";
 
 interface LessonData {
+  status?: string;
   chapter_id: string;
   title: string;
   description: string;
@@ -65,18 +66,52 @@ export default function LessonPage({
     if (!user) { router.push("/login"); return; }
 
     setLoading(true);
-    Promise.all([
-      apiGet<LessonData>(`/api/lessons/${params.chapterId}/content`),
-      apiGet<StudentProfile>("/api/onboarding/profile").catch(() => null),
-    ])
-      .then(([data, prof]) => {
-        setLesson(data);
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    async function applyLesson(data: LessonData) {
+      setLesson(data);
+      setLoading(false);
+      apiGet<ChatMessage[]>(`/api/lessons/${params.chapterId}/history`, 0)
+        .then((h) => setMessages(h))
+        .catch(() => {});
+    }
+
+    async function loadLesson() {
+      try {
+        const [data, prof] = await Promise.all([
+          apiGet<LessonData>(`/api/lessons/${params.chapterId}/content`, 0),
+          apiGet<StudentProfile>("/api/onboarding/profile").catch(() => null),
+        ]);
         setProfile(prof);
-        return apiGet<ChatMessage[]>(`/api/lessons/${params.chapterId}/history`, 0);
-      })
-      .then((history) => setMessages(history))
-      .catch(() => setError("Failed to load lesson. Please go back and try again."))
-      .finally(() => setLoading(false));
+
+        if (data.status !== "generating") {
+          await applyLesson(data);
+          return;
+        }
+
+        // Backend is generating — poll every 6s
+        pollTimer = setInterval(async () => {
+          try {
+            const polled = await apiGet<LessonData>(`/api/lessons/${params.chapterId}/content`, 0);
+            if (polled.status !== "generating") {
+              clearInterval(pollTimer!);
+              pollTimer = null;
+              await applyLesson(polled);
+            }
+          } catch {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            setError("Failed to load lesson. Please go back and try again.");
+            setLoading(false);
+          }
+        }, 6000);
+      } catch {
+        setError("Failed to load lesson. Please go back and try again.");
+        setLoading(false);
+      }
+    }
+
+    loadLesson();
+    return () => { if (pollTimer) clearInterval(pollTimer); };
 
     // Fetch notes (non-blocking)
     apiGet<{ content: string }>(`/api/notes/${params.chapterId}`)
